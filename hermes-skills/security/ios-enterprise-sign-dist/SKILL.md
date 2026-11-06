@@ -1,0 +1,214 @@
+---
+name: ios-enterprise-sign-dist
+description: "Use when pentesting iOS enterprise-sign app distribution."
+---
+
+# iOS 企业签分发链渗透(enterprise-sign distribution + 数据后台)
+
+## 何时用
+- 目标 URL 形如 `https://<rand10-12>.<rand5-6>.com/<短码>?<8-10hex>=<32hex>`(推广追踪参数),任意路径都返回同一个 SPA(index.html catch-all)
+- 页面含 `/clientapi/app/getinfo`、`itms-services://`、`.mobileprovision`、`downloadKey`、"安装后去信任"等特征
+- 背后通常是「数据收集/设备管理后台」(通讯录/相册/短信/定位/剪贴板),常见于裸聊敲诈、杀猪盘上游
+- 该型系统是**市售产品**(源码市场在卖),多团伙买用;"域名日抛"轮换、每站随机子域
+
+## 分发链(完整链路,已实测全通)
+1. `GET /clientapi/app/getinfo?appid=<短码>&android=false|true`
+   → `{appid(内部短id), name, bid, version, jumpFileUrl:/publicres/res/jump.mobileprovision, installMode, downloadMode:"inhouse", downloadKey:"<unixTs>_<md5>"}`
+2. 点安装 → `GET /clientapi/app/inhouse?appid=<短码>&k=<unixTs>_<md5>&c=&lang=zh_CN&zh=1`
+   - k 客户端侧带(页面加载时一个、点击时另一个);**过期快:重放旧 k 报"请求异常,请稍后刷新页面重试"**
+3. 前端触发 `itms-services://?action=download-manifest&url=https://<host>/mapi/plist%3Fcmduuid%3D<32hex>`
+4. `GET /mapi/plist?cmduuid=<32hex>` → plist,`items.assets.url = /clientapi/app/ipa?osskey=<32hex>`
+5. `GET /clientapi/app/ipa?osskey=<32hex>` → 301 → CDN(网宿系鉴权 URL:`?wsSecret=...&wsTime=...`)→ 下载 IPA(数十 MB)
+- 其他已知接口:`/clientapi/app/webclip?appid=`(返回 name/jump/page)、`/clientapi/app/checkdcode`、滑块验证码(取图+ck → 提交 cp=x,y)
+- appid/k/uuid 实测参数化、无注入面;重点转向未授权接口与后端
+
+## 抓包取证(拿新鲜 k / cmduuid / IPA 链)
+快速版(一次出 netlog + 渲染后 DOM):
+```
+chromium --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \
+  --window-size=390,844 --user-agent="<iPhone UA>" \
+  --log-net-log=/tmp/netlog.json --virtual-time-budget=20000 \
+  --dump-dom "<url>" > rendered.html
+```
+netlog.json 里正则提取全部 URL → 内含带 k 的 inhouse、plist、ipa 链接。
+需要交互(点"安装"→触发 itms-services)时用 CDP:`scripts/cdp_capture.js`(先在 9222 端口起 headless chromium)。
+
+## IPA 解剖
+- 主机常无 unzip → Python `zipfile` 解包
+- `Payload/Runner.app`=Flutter;重点看:
+  - `Info.plist`:权限插件(flutter_contacts/photo_manager/location/device_info 等)=采集能力
+  - `Frameworks/` 中非 Flutter 的可疑 dylib(本例 `doge.dylib`,link AdSupport+CoreTelephony+CFNetwork+SQLite=采集核心)
+  - 主二进制 `strings | grep -Ei 'dylib|@rpath|http'`:找注入库(`@executable_path/...`)与**硬编码后端 IP/域名**(本例直接挖出数据后台 IP)
+- 证书双链对比:
+  - 跳板:`jump.mobileprovision`(建立在先的企业信任,常为买来的空壳公司)
+  - 本体:`embedded.mobileprovision` 常是**被盗用的正规企业证书**——报告点名并建议 Apple 举报
+  - 读法:`openssl smime -inform DER -verify -noverify -in x.mobileprovision`(输出 plist)→ plistlib 取 TeamName/TeamIdentifier/Entitlements
+
+## 取证入口：站点未授权版本接口（2026-10 补充）
+- 部分博彩/工具站点直接暴露 `GET /api/api/public/getTenantAppVersionList`（未授权）→ 返回 APK 直链 + `itms-services://?action=download-manifest&url=<plist>` + PWA `.mobileconfig`（jinghe/晶核系平台）。IPA 从 plist 的 `software-package` url 取；`app-common.<vendor>.com` 静态资源常裸机可直连。
+- embedded.mobileprovision 直读：`plistlib` 提取文件里 `<?xml...plist` 段即可（不一定需要 openssl smime）；`DeveloperCertificates[0]`=DER → `openssl x509 -inform DER -noout -subject -issuer -dates` 出主体。
+- **实测案例**：赌博 App 的企业证书主体 = 一家正规券商（`iPhone Distribution: Founder Securities Co.,Ltd.`）——被盗用/转卖的正规企业证书，直接在报告点名并建议 Apple 举报。
+- Flutter App 本体：`lib/arm64-v8a/libapp.so` 用 blutter 全反编译（见 `flutter-app-reverse` 技能）。
+
+## 数据后台攻击面
+- 全端口扫:业务口(80)+ 微服务集群(如 8081-8091,Go,可能只有 `/ping`)+ SSH 备用口 + **22398=宝塔 soft 安全入口**(nmap 常误报 Ajenti,以 soft cookie 行为为准)
+- **API 矩阵先行**:已知路径逐个 GET+POST——`404`=方法/路径不对(nginx 层),`401 JSON`=应用层存在需登录——两者并列即画出"未登录可达面",再决定喷什么
+- Vite 后台:`__vite__mapDeps` 列出全部 chunk,批量拉取后 grep 中文文案+接口路径——**不用登录就能反推出后台全部功能**(适合直接写进报告)
+- 登录形态:POST JSON `{username,password}`;错误统一"用户名或密码错误";锁定语"登录失败次数过多,请N分钟后再试"
+
+## 设备 JWT ↔ 管理端同 secret(不用先破 secret)
+- 邀请码松时可铸**设备 JWT**(claims 通常只有 `user_id`;mass-assign `admin_id`/`role` 会被 Ignored)
+- 把设备 JWT 丢到 `/manage/*`:`验签成功后炸 Undefined admin_id` = **同 JWT secret 坐实**,不需要 hashcat 先破
+- 升权路径:破 secret 后补 `admin_id` 重签,或拿真管理端登录;设备 JWT 本身**不能**直登管理端
+- 写 IDOR 常可跨端口/跨租户(8083/86/88/90 同 secret):contacts/sms/calls/loc/photos 写入通,读回仍卡 admin JWT
+
+## 宝塔 soft cookie 破解顺序
+- soft 入口 md5 常见形如 8hex 前缀(`41475add…`);先确认是路径 cookie 而非面板口令
+- 耗尽顺序(别跳):① 词表/`/`规则 ② 1–7 位 ③ **裸 8 位 a-z** ④ **裸 8 位 a-z0-9** ⑤ **`/`+8 位 a-z0-9**(BT 路径常带前导 `/`) ⑥ 再扩 9 位/混大小写
+- 8 位 a-z 与 a-z0-9 都耗尽未中 ≠ 放弃;优先挂 `/`+8 再扩,喷降为背景
+
+## 登录限速与绕过(重点)
+- 限速**按真实 IP**:5 次/15 分钟;第 5 发**不校验密码**直接拒 → **每 IP 只有 4 次有效尝试**
+- XFF / X-Real-IP 伪造**无效**(实测计数仍递减)
+- **Tor 出口池有效**(实测:每个出口 IP 都是全新配额,连续 NEWNYM 出口 3/3 全不同):
+```
+apt-get install -y tor
+printf 'ControlPort 9051\nCookieAuthentication 0\n' >> /etc/tor/torrc
+service tor restart
+# 换出口:
+printf 'AUTHENTICATE\r\nSIGNAL NEWNYM\r\nQUIT\r\n' | nc 127.0.0.1 9051 && sleep 4
+# 经 Tor 请求 / 验证出口:
+curl -s --socks5-hostname 127.0.0.1:9050 -m 50 "$URL" ...
+curl -s --socks5-hostname 127.0.0.1:9050 https://check.torproject.org/api/ip
+```
+- 常驻喷洒:`scripts/tor_sprayer.py`(pool.json+state.json,chunk=4,每批 NEWNYM,连续配额尽 sleep 60)
+- 配"哨兵"循环(poll state.found)→ 后台进程 + notify,命中/结束再回来收割
+- **⚠️ 锁定期间别再打同一 IP(包括"认证绕过探测"类请求)——会刷新/延长锁窗;探测改用 Tor 出口**
+
+## OSINT 扩展
+- **urlscan.io API(免 key)**:`https://urlscan.io/api/v1/search/?q=<词>&size=50`
+  - 用域名/路径片段搜索,找同款模板的**滚动部署网络**(日抛域名);同款判据:随机子域+短码路径、同一 `/clientapi/*` 结构
+  - 本例借此把 6+ 历史域名与现行目标串成一张网
+- **源码市场溯源**:用功能词(如"获取通讯录 相册 短信 定位 源码")搜索 → 找到市售产品家族(游侠云/心海/探码等,加密版 ~1500U,带更新日志),用于定性;"演示视频"可 ffmpeg 抽帧 + 视觉比对确认同族 UI
+
+## 报告与处置
+- 证据链:分发链(URL+接口)→ 样本(IPA + 双证书)→ 后台(IP/API/功能清单)→ 产品谱系(市售=非孤立)
+- 处置建议:被盗企业证书→Apple 举报吊销(断链最有效);CDN/注册商投诉;执法线索
+- 口令/凭据一律 [REDACTED]
+
+## Pitfalls
+- `pkill -f "python3 spray.py"` 会匹配到自己所在 shell 的命令行并把自己杀掉(exit -15)——用 `pkill -f '[s]pray.py'` 或先 pgrep 再 kill
+- inhouse 的 k 时效极短——每个动作都以当次新鲜流量为准,别缓存重放
+- 泛解析会让 `*.<域>` 全部解析到同一 CDN/站点——测子域时别被"全部 200"迷惑,先看内容是否同一 SPA
+- CDN 上的 `private/ipa/signed/` 路径带签名参数,直接访问 403;走 `/clientapi/app/ipa?osskey=` 正规链拿新签名 URL
+- nmap 把 22398 标成 Ajenti → 先用 soft cookie/`/soft` 行为核验,再改口 BT 安全入口
+- CFG 无鉴权可读≠可写/可消费:`php://filter` 毒化常只落库,没有消费链就别报 LFI/RCE
+- 上传 GIF/JPG 带 PHP 尾可读但 nginx 不执行=假 RCE;勿写 RCE_EXEC_HIT
+- IPA XInclude 上传成功但 editor `name` 为空/公开页无 leak 标记 → **不是**已确认文件读取
+- icon/`img`=file:// 或 127.0.0.1 仅落库、无本地 `/upload` 副本 → **假 SSRF**，勿报服务端 SSRF
+- UEditor 先 dump `action=config`；catch 全挂不代表无配置；`catcherLocalDomain` 是 skip-local 不是 allowlist
+- 8443 `.p12.jpg`/`.env.txt` 200 常是错误 HTML，不是密钥
+- 用户口径:喷不是主线,挂着即可;主刀 IDOR/源码/旁路;别空聊报"已到极限"
+
+## 同机多栈：超级猫签名 + 西风分发 + 旁路后台 (2026-10)
+
+When entry is a random port SPA (e.g. `IP:8080` TG 记账) **always** fingerprint **80/443/8443** on the same IP — Chinese ops often co-host:
+
+| Surface | Fingerprints |
+|---------|----------------|
+| **超级猫超级签名** ThinkCMF | Title `超级猫超级签名 后台管理中心`; `/admin` → POST `/admin/public/dologin.html` (`username`/`password`/`captcha`); user `/user/login` `/user/tube` `/user/certificate` |
+| **西风分发** TP | `:8443` PHP 7.x; `GET /composer.json` leaks think-orm + **yunchuang/appstore-connect-api** + OSS/七牛; bare IP → `访问地址不正确` / 应用不存在或已下架 |
+| Corporate / 游戏落地 | Host-based vhosts (`ff.*` Supersign, `xlyx.*` 百胜游戏) |
+
+### SuperCat / ThinkCMF attack order (validated 154.12.30.132)
+1. **Domain not IP for admin login** — `https://IP` + `Host: brand` often returns **`非法登录!`** for every password; real domain `https://brand/` returns **`密码错误！`** when `admin` exists. Always dual-probe.
+2. User register: `/user/register/doregister.html` — **mobile as username** + `user_nickname` + `password` + `captcha`; **no SMS** on mobile tab (commented). Email tab needs mail code.
+3. Login session: ajax `dologin` may set no new Set-Cookie (reuses PHPSESSID) — still valid; **do not hit `/user/index/logout.html` during crawl** or you wipe the foothold.
+4. After user login: `/user/tube/index.html` (apps/downloads), `/user/certificate/*` (UDID/certs), `/portal/posted/*`.
+5. **`POST /user/index/islogin.html`** → full user object including **`user_pass`** (`###`+md5-style). Dump immediately; do not treat as admin table hash.
+6. **Admin table ≠ user table** — mobile/user_login cannot dologin on `/admin` (回「用户名不存在」). Admin spray only against `admin` on **canonical domain**.
+7. Admin spray: **stop after themed failures** once `密码错误` confirmed — captcha noise burns budget; prefer register foothold + business surface.
+8. IPA upload foothold: `POST /portal/index/upload_ipa.html` multipart (`file` + name/bundle/version/build) → `{code:1,id,msg}` + short link `/<er_logo>`.
+9. Edit own app: multipart `POST /user/tube/upd.html` (not bare urlencoded). Download own: `POST /user/tube/downfile.html` `{id}` → IPA bytes.
+10. **Cross-user IDOR reality check (second account required):**
+    - Real apps (other user's id): del/upd/downfile **owner-checked** (System Error / 未登录 / no change).
+    - Global empty shells (`bundle=kongbao`, placeholder name) may look shared — `del.html` success on shells **≠** cross-tenant data wipe; verify with a second registered user before reporting IDOR.
+    - `passwordpost` may accept `id=` but **ignores it** (only changes current session) — false privilege IDOR.
+11. Upload: `/user/asset/webuploader.html` + Ueditor `action=uploadimage` accept jpg/png/**gif**. PHP appended to GIF lands under `/upload/YYYYMMDD/*.gif` as **source leak**; `Content-Type: image/*` + nginx **does not execute** → **fake RCE**, report as stored source disclosure only.
+12. Fingerprint: error page may leak **ThinkPHP V5.0.11**; `X-Powered-By: PHP/7.1.x`. Classic `invokefunction` / captcha `_method=__construct` payloads often **blocked** (404/System Error) — don't burn cycles replaying encyclopedia TP5 lists after first clean miss.
+13. `:8443` 西风 — see traversal + 403 matrix below; need short-code + correct Host for install; clientapi chain only after short-code found.
+
+### 西风 :8443 static path traversal (validated)
+- **Readable via `/static/../`:** `composer.json`, `static/app/app.mobileprovision` (and `%2f` variants).
+- **Present but nginx 403 (403≠404):** `.env`, `.env.production`, `data/conf/database.php`, `.git/HEAD|.git/config`, `static/app/{app,cert,sign,dist,ios}.p12`, `key.pem`.
+- Suffix tricks (`.p12.jpg`, `.env.txt`) often flip to **200 error HTML**, not file bytes — don't call HIT.
+- Wrong/missing Host → `访问地址不正确` or `该应用不存在或已下架` (size ~24 or ~11k template).
+- Goal after 403: alternate download controller, backup, or admin path — not more extension spam.
+
+### 西风 admin 登录链 (Xuanfeng / HelloAdmin / XinAdmin · validated 154.12)
+- Page: `GET /admin/login` title **西风分发** / form brand **HelloAdmin**; avatar `/xinadmin/login/images/admin.jpg`; **no captcha** (`codeopen = "0"`).
+- Fields: `adminname` + `adminpassword` (not username/password).
+- **Real POST:** `/admin/login/login` (path-style). Frontend `CheckLogin` → `$.ajax({ url: "?a=login", dataType:'json' })` relative to login page — effective URL is **`/admin/login/login`**.
+- **Trap:** `POST /admin/login?a=login` often returns **full login HTML again** (looks like 200 success). Always require JSON `status`.
+- Fail JSON: `{"status":"no","msg":"登录信息有误或帐号未激活"}` (wrong pass **and** inactive share one msg — no oracle).
+- Success: `{"status":"ok",...}` then `layer.alert` + reload; session PHPSESSID.
+- Unauth `/admin/config|/index|/app|/user` → **提示信息 尚未登陆！** + meta refresh to `/index.php/admin/...` — **not** config leak (13k body can still be jump shell).
+- XinAdmin public default lore `admin/123456` often changed; themed spray (admin/xifeng/xuanfeng/xinadmin/HelloAdmin/pear/apple + common) all `no` on sample — **no captcha / no observed lock** → background deep dict OK, not mainline after themed miss.
+- SQLi-ish usernames → same `no` — not blind-success oracle.
+- SSH on co-host may have password auth open; SuperCat user / 西风 admin passwords **do not** equal root — separate spray, don't assume reuse.
+
+### 西风 XinAdmin 静态未授权（登录前必拉）
+Static under `/xinadmin/` is often **world-readable** even when `?c=` business needs session:
+| Path | Value |
+|------|--------|
+| `/xinadmin/adminuser/config/pear.config.yml` + `.json` | Pear UI config (logo/index/menu API pointers) |
+| **`/xinadmin/adminuser/admin/data/menu.json`** | **Full backend function tree unauth** — highest value recon |
+| `/xinadmin/adminuser/admin/data/message.json` | Message templates if present |
+| `/xinadmin/adminuser/component/pear/css|module/...` | Pear admin chrome (confirm stack) |
+| `/xinadmin/login/images/admin.jpg` | Brand avatar on login |
+
+**menu.json modules to expect (西风 class):**
+- `?c=key` 企业密钥 · `?c=cert` 企业签证书 · `?c=super_cert` 超级签证书
+- 超级签授权码/设备/记录 · `file_code` 文件秘钥 · `?c=admin` 管理员
+- 用户/充值/提现 · `?c=clear` 清理安装包
+
+**After menu leak:** map `?c=<name>` / `/index.php/admin/?c=` unauth — sample returns **~11344 西风 error template** (not data) until login. Do **not** call unauth menu a RCE/IDOR; call it **admin surface inventory**. `install.lock` may **403 present** (file on disk).
+
+**Root reality for this class:** user SuperCat foothold + menu inventory ≠ shell. Closest gate is **西风 admin password** (certs/keys behind login) or **8443 nginx 403 bypass** on `.env`/p12. Don't report root until shell/SSH/DB proven.
+
+### 西风 install / wave.js API (brand DAFU / Xuanfeng)
+From error-page `/static/index/js/template/wave.js`:
+- `DAFU.brand = "Xuanfeng"`; `config.server = "/index/ajax/jsonFormat?lang=" + language + "&link=" + link + (ssid?…)`
+- `GET /index/ajax/jsonFormat?lang=zh&link=<short>` → JSON `code:200`; unknown link → `data.template:"error"` (~10k). Need **real distribute short link**, not SuperCat er_logo.
+- `GET/POST /index/super_sign/dosign` `{appid,ssid,authcode}` — wrong platform/UA → `PLATFORM_NOT_MATCHING`; needs iPhone UA + live appid/ssid.
+- `POST /index/super_sign/check_sign` → often `{"code":2,"data":2}` baseline.
+- `GET /index/guide?lang=zh`, `/index/ajax/adsense?template=tmp1`, `/index/ajax/report` (content+email required).
+- Parent skill clientapi chain still applies **after** true short-code + Host found.
+
+### SuperCat webuploader server path
+- Page `/user/asset/webuploader.html` (auth): `WebUploader.create({ server: "/user/asset/webuploader.html?_ajax=1", ...})`
+- `httpUrl = "https://<brand>/upload/"` — local disk, not Qiniu uptoken (even if qiniu JS present on other pages).
+- Same gif/jpg rules as UEditor; `?_ajax=1` returns `{code:1,data:{filepath,preview_url,url}}`.
+
+### Co-hosted marketing CMS (百胜 BestGame pattern)
+When same apex hosts a Next/Vite marketing site (`百胜游戏 BestGame`):
+- `/admin` → 307 `/admin/login`; form **`POST /api/admin-login`** (`username`/`password` urlencoded).
+- **Fail signature:** `303 Location: .../admin/login?error=1` (no Set-Cookie).
+- **Success signature:** 303 to `/admin` (not login) + session cookie (name often `bestgame_admin`; HttpOnly/Secure/SameSite).
+- Related: `/api/admin-logout`, `/api/admin-password` (JSON current/new), `/api/content` (GET/POST, **revision** optimistic lock), `/api/upload` (POST multipart, 401 unauth).
+- Unauth `/api/content` → `401` JSON `请先登录管理员账号` — surface exists; weak cookie forge (md5/hmac of `admin`) failed in test — need real login or sealing secret from source.
+- Chunk map: `__vite__mapDeps` / route table in main JS lists all admin APIs without auth.
+
+### Co-hosted TG 记账 SPA (:8080 pattern)
+- Vite SPA title `TG 记账后台`; axios `baseURL:"/api"`; login `POST /api/auth/login` JSON `{username,password}` → Bearer token; `GET /api/me`.
+- Super routes in frontend: `/users`, `/logs` (`meta.super`); groups/plans/licenses/transactions/export.
+- No public register; **RATE_LIMITED by real IP** — use Tor NEWNYM (4 tries/exit); don't hammer origin.
+- JWT `none` + common HS256 secrets often miss — map API first, spray second.
+
+Detail: `references/supercat-xifeng-cohost-15412-10-01.md`
+
+## Support files
+- `scripts/tor_sprayer.py` — Tor 出口池喷洒器(可直接改用)
+- `scripts/cdp_capture.js` — CDP 抓包 + 点击交互(需 9222 端口 chromium)
+- `references/case-niwsiq-2026-09.md` — 完整案例(域名/接口/证书/后台清单)
+- `references/supercat-xifeng-cohost-15412-10-01.md` — 超级猫+西风+百胜+TG记账同机 (2026-10): islogin/IPA/IDOR、8443 穿越/403、**XinAdmin menu.json 未授权**、BestGame、TP5.0.11、XXE·XInclude、UEditor txt、假 SSRF、8080 null-byte、root 卡口

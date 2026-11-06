@@ -1,0 +1,15 @@
+## Pitfalls
+
+- **Codex relay login loop**: relay config with `requires_openai_auth = true` (CC Switch writes this by default) forces the ChatGPT OAuth login flow even when a valid `experimental_bearer_token` is present. Stale/expired OAuth tokens in `~/.codex/auth.json` make it worse (endless "Failed to refresh token: 401 invalid_refresh_token"). Fix: set `requires_openai_auth = false` in `[model_providers.custom]`, back up and remove `~/.codex/auth.json`. Symptom: user sees "登录/重新登录" despite using a relay.
+- **Hermes tool output redacts `sk-` API keys**: `read_file`/`grep`/terminal output shows keys as `«redacted:sk-…»` or `sk-Zwo...h16o` — the REAL key may be intact in the file/DB. Don't conclude "key lost" from redacted display; use `patch`/`diff` (which reveal actual content) or compare lengths to verify. The diff output of a patch shows the true bytes.
+- **Missing `model_instructions_file` hard-errors codex**: if `model_instructions_file` points to a deleted file (e.g. jailbreak prompt cleaned up), `codex` refuses to start (`failed to read model instructions file`). Remove the line or restore the file.
+- **`~/.claude/config.toml` is nearly empty for ReClaude users** — don't look 
+  there for provider config; it only has `model_instructions_file`.
+- **CC-Switch env vars are not in the shell environment** — they're injected 
+  into the daemon process. Running `env | grep ANTHROPIC` in a regular 
+  terminal shows nothing.
+- **`currentProviderClaude` value in CC-Switch** is a generated ID like 
+  `rightcode-1783706964495` — you must query the DB to resolve it.
+- **`settings.json` vs `settings.local.json`** — both exist in `~/.claude/`.\n  `settings.local.json` holds permission allow-lists. The main `settings.json`\n  holds MCP servers and permission mode config.
+- **`state.json` persists across sessions** — a stale `state.json` from a previous daemon may show old port numbers. The new daemon overwrites it on start.\n- **`gateway.healthy: true` is a snapshot** — it means the last health check succeeded, not current. Check `last_check_at_ms` for recency.\n- **Daemon.log appends, never rotates** — look for the `已正常退出` (clean exit) timestamp to find where the old session ended.\n- **`dl.reclaude.ai` DNS failure is non-critical** — update checks fail but daemon proxy works fine.\n- **OAuth credentials in `~/.claude/.credentials.json` work only through the ReClaude daemon** — direct `--backend anthropic` with OAuth returns 401. The token is not directly portable to the Anthropic SDK.
+- **settings.json env overrides can break OAuth without CC-Switch** — stale `ANTHROPIC_MODEL` / `ANTHROPIC_BASE_URL` / `ANTHROPIC_DEFAULT_*` env vars in `~/.claude/settings.json` force all requests through a custom relay (fkcodex, aisz.mom, etc.). This is a simpler route to a custom provider than CC-Switch: just the `env` block in settings.json. **Recovery**: strip the env block, set model to `opus[1m]` or `claude-sonnet-4-6-20251002`, verify `.credentials.json` has valid OAuth, then run `claude auth status`. No CC-Switch DB queries needed.

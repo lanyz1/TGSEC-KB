@@ -1,0 +1,10 @@
+## Aftersales (售后) patterns (verified on 售后 pages)
+- **Evidence cards**: emoji evidence (🖼🎥) is slop — use `.evid` 72px SVG image placeholders (image glyph for photos, video glyph + corner `vid-tag` "视频" pill for video) + a header count badge ("2 图 · 1 视频"). Same stroke/color conventions as product thumbnails.
+- **4-way action form that really switches** (mainstream parity — the old form showed a refund-amount field no matter which radio was picked): radios 同意退款 / 拒绝退款 / 请求补充证据 / 升级平台仲裁, each toggling its own block — agree: 退款金额(USDT, 最大可退 hint) + 说明(买家可见); reject: 拒绝理由(必填,买家可见) + 内部备注(仅商家可见); evid: 补充说明; arbitrate: NO form, show `.risk-box` (仲裁周期 3-7 工作日 / 结果有约束力 / 工单锁定) and the submit button morphs to danger "确认升级仲裁" → opens the shared `modal-arbitrate` risk modal. `asSubmit()` routes toast text by selected value.
+- Timeline reuses the shared `.tl` component (提交→系统通知 done / 商家处理中 cur).
+- **Work-order list = product-card style** (user asked to benchmark mainstream: "工单页面做成商品卡那种"): `.as-card` = top row (checkbox + 单号 + status pill + type tag + right-aligned `.as-timeout` label) + `.as-body` two-column (LEFT: 48px product thumb + title + mono SKU line; RIGHT: 诉求描述 + meta row 关联订单·买家·金额) + `.as-ops` action row. Never a bare text list — the product image is what makes it readable.
+- **Timeout labels carry the state machine**: 商家处理中 → red "剩余 4 小时 · 超时自动升级仲裁"; 已拒绝 → gray "已拒绝 · 买家可申诉,申诉后可改判"; 平台介入中 → gray "平台处理中 · 商家不可操作"; 已退款 → gray "已完成 · date". The label itself documents next-action + consequence (gap #1 超时自动升级 closed by copy alone).
+- **改判 (rejudge)**: rejected card exposes a primary "改判退款" button (toast 改判成功) instead of 同意退款 — mainstream rejudge entry after buyer appeal.
+- **退款原因分类 (gap #2)**: agree form gets 退款原因 dropdown (质量问题/描述不符/错发漏发/运输损坏/买家原因); reject form gets 拒绝原因 dropdown (买家举证不足/商品已使用/超出售后期/其他) — required for platform statistics, mirrors TikTok Shop.
+- **Merchant evidence upload** (user: "卖家拒绝退款也可以添加照片视频"): the reject form carries the SAME `.img-grid` evidence component as the buyer side (2 seeded items + 添加 button, hint "支持图片/视频 · 最多 6 个 · 举证材料将同步给平台仲裁参考") — evidence parity both sides for arbitration.
+

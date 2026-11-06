@@ -1,0 +1,42 @@
+# 子卡索引 第 5/6 片（40 张，re-license → re-whitebox）
+
+- **re-license** — 授权验证逻辑分析：注册校验定位。触发词：注册码、授权验证、license、序列号校验、破解定位  ·  `references/legacy/re-license.md`  ·  `/root/.hermes/skills/security/re-license`
+- **re-lldb** — lldb 调试（macOS/iOS）：attach、expr、image。 触发词：lldb、macOS调试、iOS调试  ·  `references/legacy/re-lldb.md`  ·  `/root/.hermes/skills/security/re-lldb`
+- **re-loader** — 加载器/投放器分析：多层下载、内存加载、模块拼接。 触发词：加载器、loader、dropper、投放器、内存加载、模块拼接  ·  `references/legacy/re-loader.md`  ·  `/root/.hermes/skills/security/re-loader`
+- **re-macos** — macOS 原生应用逆向：App Bundle/签名公证、entitlements、沙箱与 TCC、钥匙串与 Secure Enclave。 触发词：macOS逆向、mac app、entitlements、Secure Enclave、钥匙串、TCC、codesign、公证。  ·  `references/legacy/re-macos.md`  ·  `/root/.hermes/skills/security/re-macos`
+- **re-malware** — 恶意软件分析网关。编排：默认沙箱 → 静态初勘 → 行为分析 → C2/协议 → IOC/报告。 子技能：[[re-sandbox]] [[re-behavior]] [[re-ioc]] [[re-ransomware]] [[re-loader]] [[re-fileless]]、[[re-doc-malware]]、[[re-sample-acquire]]。 触发词：恶意软件、样本行为、回连、C2、IOC、malware analysis。  ·  `references/legacy/re-malware.md`  ·  `/root/.hermes/skills/security/re-malware`
+- **re-managed** — 托管代码逆向网关。编排：识别运行时 → 反编译 → 去混淆 → 恶意场景转 [[re-malware]]。 子技能：[[re-dotnet]] [[re-java]] [[re-script-deob]] [[re-wasm]] [[re-ai-triage]] → [[re-ai-model]] [[re-blockchain]] [[re-python]]、[[re-browser-ext]]、[[re-electron]]、[[re-javacard]]。 触发词：.NET、dnSpy、ILSpy、Java、jar、字节码、PowerShell混淆、VBA宏、JS去混淆、托管代码、managed code。  ·  `references/legacy/re-managed.md`  ·  `/root/.hermes/skills/security/re-managed`
+- **re-mem-forensics** — Volatility 3 内存取证：进程/内核对象/网络/凭据线索。 触发词：内存取证、Volatility、memdump分析、进程列表、mimikatz线索  ·  `references/legacy/re-mem-forensics.md`  ·  `/root/.hermes/skills/security/re-mem-forensics`
+- **re-memdump** — 内存转储与提取：默认转储优先(gcore)，直读特例。 触发词：内存转储、dump内存、找密钥、DEX提取  ·  `references/legacy/re-memdump.md`  ·  `/root/.hermes/skills/security/re-memdump`
+- **re-mips** — MIPS 架构逆向与路由器固件分析方法论：延迟槽、$gp 调用约定、大小端判断、httpd 定位。 触发词：MIPS、mipsel、路由器固件、嵌入式、延迟槽、big-endian、大端、小端、httpd、busybox  ·  `references/legacy/re-mips.md`  ·  `/root/.hermes/skills/security/re-mips`
+- **re-netcap** — 网络流量捕获：tcpdump/Wireshark/抓包。 触发词：抓包、tcpdump、wireshark、流量分析、pcap  ·  `references/legacy/re-netcap.md`  ·  `/root/.hermes/skills/security/re-netcap`
+- **re-nim** — Nim 编译产物逆向：运行时识别、NimString 结构、异常与 GC 路径。 触发词：Nim逆向、nim、NimString、NimMain、nim 产物。  ·  `references/legacy/re-nim.md`  ·  `/root/.hermes/skills/security/re-nim`
+- **re-packer-id** — 壳与混淆器识别：签名/节名/EP/熵。触发词：查壳、加壳识别、packer、壳名、UPX  ·  `references/legacy/re-packer-id.md`  ·  `/root/.hermes/skills/security/re-packer-id`
+- **re-patching** — 补丁制作：字节级 patch、指令重写。触发词：打补丁、patch、修改跳转、绕过验证、crack  ·  `references/legacy/re-patching.md`  ·  `/root/.hermes/skills/security/re-patching`
+- **re-plugin-dev** — Ghidra/IDA 插件开发：脚本→插件工程化。 触发词：插件开发、Ghidra插件、IDA插件、插件工程  ·  `references/legacy/re-plugin-dev.md`  ·  `/root/.hermes/skills/security/re-plugin-dev`
+- **re-proto-rev** — 协议状态机重建：Scapy 解析、消息结构。 触发词：协议逆向、状态机、scapy、自定义协议  ·  `references/legacy/re-proto-rev.md`  ·  `/root/.hermes/skills/security/re-proto-rev`
+- **re-protocol** — 协议逆向网关。编排：捕获 → 加密识别 → 密钥 → 解密 → 状态机重建。 子技能：[[re-netcap]] [[re-crypto-id]] [[re-crypto-keys]] [[re-crypto-decrypt]] [[re-proto-rev]] [[re-ics]] [[re-iot-proto]] [[re-whitebox]] [[re-tls]]。 触发词：协议逆向、抓包、流量分析、解密流量、C2协议、自定义协议、protocol analysis。  ·  `references/legacy/re-protocol.md`  ·  `/root/.hermes/skills/security/re-protocol`
+- **re-pwn** — CTF pwn 入门：栈溢出、格式化字符串、ret2libc。 触发词：pwn、栈溢出、格式化字符串、ret2libc、ROP、shellcode 注入  ·  `references/legacy/re-pwn.md`  ·  `/root/.hermes/skills/security/re-pwn`
+- **re-python** — Python 打包/混淆样本分析：PyInstaller/PyArmor/Nuitka/Cython 解包、pyc 版本识别与反编译。 触发词：Python打包、PyInstaller、PyArmor、pyc、python exe、Python 样本、打包样本。  ·  `references/legacy/re-python.md`  ·  `/root/.hermes/skills/security/re-python`
+- **re-ransomware** — 勒索软件分析：加密识别、勒索信、解密恢复思路。 触发词：勒索、ransomware、加密文件、勒索信、解密恢复  ·  `references/legacy/re-ransomware.md`  ·  `/root/.hermes/skills/security/re-ransomware`
+- **re-riscv** — RISC-V 架构逆向：RV32/RV64、压缩指令（RVC）、gp 相对寻址、ABI 与 ecall 系统调用约定、工具链指纹。 触发词：RISC-V、riscv、RV32、RV64、RVC、压缩指令、ecall、ESP32-C3、GD32V。  ·  `references/legacy/re-riscv.md`  ·  `/root/.hermes/skills/security/re-riscv`
+- **re-rtos** — RTOS 结构分析：FreeRTOS/ThreadX/Zephyr/RT-Thread/VxWorks/QNX/RTEMS/NuttX/eCos/µC-OS/SYS-BIOS/SAFERTOS/CMSIS-RTX5/T-Kernel/TOPPERS/OSE/INTEGRITY/ARINC 653/PikeOS/Deos 运行模型判定、任务表与 TCB…  ·  `references/legacy/re-rtos.md`  ·  `/root/.hermes/skills/security/re-rtos`
+- **re-rust** — Rust 二进制逆向：符号、monomorphization、所有权模式。触发词：Rust、rust、Rust二进制、cargo  ·  `references/legacy/re-rust.md`  ·  `/root/.hermes/skills/security/re-rust`
+- **re-sample-acquire** — 样本现场采集（从现象到可用样本）：目标没有独立进程、样本不落盘时，以「异常执行内存 + 到达该内存的执行上下文」为核心定位载体并运行时提取。 覆盖四种观测模型：Windows（VAD/线程/ETW）、Linux（VMA/BPF LSM）、macOS（Mach VM/Endpoint Security）、seL4（capability provenance）。 触发词：样本获取、现场采集、没有样本、只有现象、不落盘、无文件、注入、内存马、运行时捕获、内存提取样本。 English triggers: sample acquisition, live acquisition, no sample, fileless, injected code, memory-resident, runtime capture.  ·  `references/legacy/re-sample-acquire.md`  ·  `/root/.hermes/skills/security/re-sample-acquire`
+- **re-sandbox** — 沙箱环境搭建（动态分析强制前置）。 触发词：沙箱、隔离环境、firejail、VM快照、安全运行  ·  `references/legacy/re-sandbox.md`  ·  `/root/.hermes/skills/security/re-sandbox`
+- **re-script-deob** — 脚本/宏去混淆：PowerShell、VBA、JavaScript。触发词：PowerShell混淆、VBA宏、JS去混淆、脚本解密、恶意脚本  ·  `references/legacy/re-script-deob.md`  ·  `/root/.hermes/skills/security/re-script-deob`
+- **re-sdr** — 射频逆向：信号采集、频谱分析、解调、帧同步与协议恢复、重放。 触发词：SDR、射频、信号分析、解调、RTL-SDR、HackRF、无线协议、遥测。  ·  `references/legacy/re-sdr.md`  ·  `/root/.hermes/skills/security/re-sdr`
+- **re-shellcode** — Shellcode 分析：提取、解码循环、模拟执行。 触发词：shellcode、shell code、位置无关、解码循环、恶意载荷  ·  `references/legacy/re-shellcode.md`  ·  `/root/.hermes/skills/security/re-shellcode`
+- **re-stego** — 隐写术检测与提取：文件尾附加、图片 LSB、音频与其他载体、提取验证。 触发词：隐写、stego、LSB、文件尾附加、隐写提取、图片隐写。  ·  `references/legacy/re-stego.md`  ·  `/root/.hermes/skills/security/re-stego`
+- **re-swift** — Swift 二进制逆向：mangling 解码、协议 witness table、闭包捕获、ObjC 互操作。 触发词：Swift逆向、swiftc、witness table、swift demangle、闭包捕获、Swift 产物。  ·  `references/legacy/re-swift.md`  ·  `/root/.hermes/skills/security/re-swift`
+- **re-tee** — TEE/TrustZone 逆向：OP-TEE 架构、可信应用（Trusted App）、secure storage、SMC 接口与设备密钥。 触发词：TEE、TrustZone、OP-TEE、可信应用、Trusted App、secure world、SMC、安全存储、secure storage、设备密钥  ·  `references/legacy/re-tee.md`  ·  `/root/.hermes/skills/security/re-tee`
+- **re-ti** — 威胁情报查询与关联：VT/Any.run/hybrid-analysis、MISP。 触发词：威胁情报、VirusTotal、Any.run、沙箱查询、MISP、样本关联  ·  `references/legacy/re-ti.md`  ·  `/root/.hermes/skills/security/re-ti`
+- **re-tracing** — 系统调用/函数调用跟踪：strace/ltrace/dtruss。 触发词：strace、跟踪系统调用、ltrace、API监控  ·  `references/legacy/re-tracing.md`  ·  `/root/.hermes/skills/security/re-tracing`
+- **re-triage** — 文件初步勘察：file/哈希(sha256/md5)/熵/strings/架构识别。 触发词：先看看这文件、triage、初勘、这是什么文件、hash  ·  `references/legacy/re-triage.md`  ·  `/root/.hermes/skills/security/re-triage`
+- **re-uefi** — UEFI/BIOS 固件：SEC/PEI/DXE/BDS 阶段判定、DXE 驱动、UEFI 模块、bootkit。 触发词：UEFI、BIOS、DXE、PEI、SEC、PEIM、HOB、bootkit、Secure Boot、EFI 固件、runtime driver  ·  `references/legacy/re-uefi.md`  ·  `/root/.hermes/skills/security/re-uefi`
+- **re-unpack-advanced** — 强壳脱壳：VMProtect/Themida。触发词：VMProtect、Themida、强壳、虚拟化壳、手动脱壳  ·  `references/legacy/re-unpack-advanced.md`  ·  `/root/.hermes/skills/security/re-unpack-advanced`
+- **re-unpack-simple** — 压缩壳脱壳：UPX/ASPack/FSG。触发词：脱壳、unpack、UPX、esp定律、OEP  ·  `references/legacy/re-unpack-simple.md`  ·  `/root/.hermes/skills/security/re-unpack-simple`
+- **re-variant** — 二进制变体/补丁对比：函数匹配、N-day 补丁 diff、变体溯源与相似度分析。 触发词：二进制对比、补丁对比、N-day、变体分析、BinDiff、函数匹配、样本相似。  ·  `references/legacy/re-variant.md`  ·  `/root/.hermes/skills/security/re-variant`
+- **re-vuln** — 漏洞挖掘网关。编排：目标与输入面识别 → 覆盖率引导 fuzzing → 崩溃分析 → 逆向定位 → 报告。 子技能：[[re-fuzzing]] [[re-crash-triage]] [[re-exploit]]。 触发词：漏洞挖掘、挖洞、fuzz、模糊测试、AFL、libFuzzer、崩溃分析、 crash、vulnerability hunting、fuzzing。  ·  `references/legacy/re-vuln.md`  ·  `/root/.hermes/skills/security/re-vuln`
+- **re-wasm** — WASM 逆向：格式解析、wasm2wat、浏览器侧。触发词：WASM、wasm、WebAssembly、wat  ·  `references/legacy/re-wasm.md`  ·  `/root/.hermes/skills/security/re-wasm`
+- **re-whitebox** — 白盒加密分析：白盒实现识别、密钥提取。 触发词：白盒、whitebox、白盒加密、密钥隐藏  ·  `references/legacy/re-whitebox.md`  ·  `/root/.hermes/skills/security/re-whitebox`

@@ -1,0 +1,36 @@
+[基线] 本库 C:\Users\Administrator\AppData\Local\hermes\profiles\123\skills\security -> 899 张 SKILL.md
+[上游] D:/skills4redteam/pentest-pro-skills/skills -> 13 张 SKILL.md
+
+### active-directory           OK=37  HOLE=0  SOFT=2  REF=0  ATTR=2 
+
+### auth-api-security          OK=31  HOLE=0  SOFT=0  REF=0  ATTR=2 
+
+### binary-exploitation        OK=22  HOLE=0  SOFT=3  REF=2  ATTR=0 
+
+### cloud-mobile-iot           OK=19  HOLE=0  SOFT=0  REF=0  ATTR=1 
+
+### code-audit                 OK=17  HOLE=0  SOFT=4  REF=3  ATTR=0 
+
+### crypto                     OK=18  HOLE=0  SOFT=3  REF=0  ATTR=2 
+
+### pentest-process            OK=9   HOLE=0  SOFT=4  REF=0  ATTR=3 
+
+### post-exploitation          OK=35  HOLE=0  SOFT=0  REF=0  ATTR=1 
+
+### privilege-escalation       OK=26  HOLE=0  SOFT=0  REF=0  ATTR=0 
+
+### recon                      OK=23  HOLE=0  SOFT=5  REF=4  ATTR=1 
+
+### web-architectural          OK=22  HOLE=0  SOFT=2  REF=1  ATTR=1 
+   HOLE aimy_oob_domain                hits=0
+
+### web-injection              OK=36  HOLE=1  SOFT=1  REF=0  ATTR=3 
+
+### wireless                   OK=31  HOLE=0  SOFT=2  REF=0  ATTR=1 
+
+========================================================================
+[结论] HOLE(真缺口候选) 1 个 -> 值得拉,逐个看上下文再决定建卡:
+   - web-injection :: aimy_oob_domain
+
+[SOFT] 中文标题短语 26 个(多为章节名,人工扫一眼,不影响结论): 不可协商, 与内网攻击, 与参数收集, 二进制漏洞利用, 云端资产, 代码审计方法论, 凭据攻击, 判定优先, 十维攻击面模型, 原语利用, 哈希攻击, 存活与指纹, 实现攻击, 对称缺陷, 工作流调度, 无线网络安全, 条件竞争, 架构层攻击, 核心设计原则, 源码泄露检测, 漏洞验证分界, 统一写盘, 缓解绕过, 网状网络, 被动资产枚举, 贯穿所有攻击面
+[存] D:/skills4redteam/gap-final.json

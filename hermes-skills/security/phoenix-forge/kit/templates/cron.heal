@@ -1,0 +1,3 @@
+# 自愈 cron（落点 /etc/cron.d/<TAG>-heal）
+@reboot root /bin/sh <BASE>/fguard-heal.sh >/dev/null 2>&1
+* * * * * root /bin/sh <BASE>/fguard-heal.sh >/dev/null 2>&1

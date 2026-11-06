@@ -1,0 +1,94 @@
+---
+name: pki-cert-ops-and-gm-crypto
+description: "Use when 打证书/PKI/国密面。证书链审计+私有CA+GMSSL实测。"
+version: 1.0.0
+created_by: agent
+---
+
+# PKI 证书运维与国密(SM2/SM3/SM4)
+
+覆盖两块:**① 证书面审计**(拿站/横向时的信任链弱点、私钥泄露、过期/弱签名)**② 私有 CA 与国密体系落地**(签发链、GMSSL 命令)。
+
+## 触发场景
+
+- 目标用自签/私有 CA 证书、双向认证 mTLS、客户端证书登录
+- 要查证书过期/弱签名算法/信任链错误/证书与域名不匹配
+- 目标是中国政企系统,出现国密 TLS、SM2 签名、SM4 加密接口、GMSSL
+- 需要搭一套私有 CA / 签发测试证书 / 做证书链实验
+
+## 一、证书面审计(先跑这些)
+
+```bash
+HOST=target.example.com
+# 1) 指纹与链:一次拿全
+openssl s_client -connect $HOST:443 -servername $HOST -showcerts </dev/null 2>/dev/null \
+  | openssl x509 -noout -subject -issuer -dates -ext subjectAltName
+# 2) 到期时间(批量巡检用这一行)
+echo | openssl s_client -connect $HOST:443 -servername $HOST 2>/dev/null | openssl x509 -noout -enddate
+# 3) 弱签名/弱密钥
+openssl s_client -connect $HOST:443 </dev/null 2>/dev/null | openssl x509 -noout -text \
+  | grep -Ei "Signature Algorithm|Public-Key"
+# 4) 协议与套件面
+testssl.sh --fast $HOST                 # 全量: testssl.sh -p -s -S $HOST
+nmap --script ssl-enum-ciphers,ssl-cert -p 443 $HOST
+python3 -m sslyze --regular $HOST       # 可选
+```
+
+**攻击视角检查清单**(每轮必过):证书 CN/SAN 与目标域不符 ⇒ 内部系统/Host 伪造空间;自签被客户端无条件信任 ⇒ MITM;私钥落在 web 目录/`.git`/开放目录 ⇒ `grep -ril "PRIVATE KEY"` + 目录爆破 `*.key`/`*.p12`/`*.jks`;mTLS 客户端证书弱口令保护或全站复用同一张 ⇒ 横向凭据。
+
+## 二、私有 CA 签发链(四步,可直接跑)
+
+```bash
+# 1) Root CA(4096,10 年)
+openssl genrsa -aes256 -out root_ca.key 4096
+openssl req -x509 -new -nodes -key root_ca.key -sha256 -days 3650 -out root_ca.crt \
+  -subj "/C=CN/O=Lab Root CA/CN=Lab Root CA"
+# 2) Intermediate CA(5 年) —— 根私钥离线保存,日常只用中间 CA
+openssl genrsa -aes256 -out intermediate_ca.key 4096
+openssl req -new -key intermediate_ca.key -out intermediate_ca.csr -subj "/C=CN/O=Lab PKI/CN=Lab Intermediate CA"
+openssl x509 -req -in intermediate_ca.csr -CA root_ca.crt -CAkey root_ca.key \
+  -CAcreateserial -out intermediate_ca.crt -days 1825 -sha256 -extfile intermediate.ext
+# 3) 服务器证书(必带 SAN,现代客户端不看 CN)
+cat > san.ext <<'EOF'
+subjectAltName=DNS:server.lab.test,DNS:api.lab.test
+keyUsage=digitalSignature,keyEncipherment
+extendedKeyUsage=serverAuth
+EOF
+openssl x509 -req -in server.csr -CA intermediate_ca.crt -CAkey intermediate_ca.key \
+  -CAcreateserial -out server.crt -days 365 -sha256 -extfile san.ext
+# 4) 拼完整链并验证
+cat server.crt intermediate_ca.crt > fullchain.crt
+openssl verify -CAfile root_ca.crt -untrusted intermediate_ca.crt server.crt
+```
+
+吊销/状态查询:`openssl ca -config openssl.cnf -revoke server.crt` → `openssl ca -gencrl -out crl.pem`;OCSP `openssl ocsp -issuer ca.crt -cert server.crt -url http://ocsp.lab.test -resp_text`。
+
+## 三、国密面(SM2/SM3/SM4)
+
+国密 TLS 不是替换密码套件而是**双证书体系**(签名证书+加密证书),握手用 `ECDHE-SM2-WITH-SMS4-SM3`。识别与测试:
+
+```bash
+# 指纹:响应里出现国密套件/双证书即国密链路(本机需 GmSSL 分支)
+gmssl s_client -connect $HOST:443 -cipher ECDHE-SM2-WITH-SMS4-SM3
+# 密钥/证书/杂凑(命令按 GmSSL 3.x CLI,本机未实测,现场先 gmssl version 对齐)
+gmssl sm2keygen -pass P0ssw0rd -out sm2.key -pubout sm2.pub
+gmssl certgen -C CN -O Lab -CN gm.lab.test -days 365 -key sm2.key -pass P0ssw0rd -out gm.crt
+gmssl sm3 -in payload.bin ; gmssl sm4 -key <32hex> -in plain.bin -out enc.bin
+```
+
+**接口层面的国密**:前端 JS/SDK 出现 `sm2`/`sm3`/`sm4`/`gmssl`/`sM2Encrypt` 即后端多半有国密网关;与普通 AES 相同的打法(AES/国产密码逆向→见 `webapp-api-crypto-reverse`、`gambling-api-crypto-reversal`),区别是密钥常硬编码在 JS 或下发的公钥里。
+
+## 参考文件
+
+| 文件 | 内容 |
+|---|---|
+| `references/upstream-pki-architecture.md` | 私有 CA/中间 CA/证书生命周期/EJBCA/Vault PKI 全文(12KB) |
+| `references/upstream-tls-audit.md` | TLS 配置与审计、Nginx Mozilla 推荐配置全文(12KB) |
+| `references/upstream-crypto-keymgmt.md` | 对称/非对称加密与密钥管理全文(16KB) |
+
+来源: https://github.com/Hi-FullHouse/CyberSecurity-Skills (MIT) 35-密码学与 PKI 模块,原样落地到 references/。
+
+## 交接
+
+`crypto-toolkit`(编解码/弱随机) · `jwt-attacks` · `webapp-api-crypto-reverse`(国密接口逆向) · `gov-wxmini-audit`(政务小程序国密面)。
+

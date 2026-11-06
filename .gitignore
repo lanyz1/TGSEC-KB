@@ -1,0 +1,10 @@
+*.bak
+*.bak-*
+node_modules/
+toolkit/
+*.zip
+*.7z
+*.tar.gz
+arsenal/arsenal.db
+arsenal/arsenal.db-*
+*.pdf

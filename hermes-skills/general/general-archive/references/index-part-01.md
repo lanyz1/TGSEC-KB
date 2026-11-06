@@ -1,0 +1,80 @@
+# 子卡索引 第 1/2 片（78 张，claude-code → llm-wiki）
+
+- **claude-code** — Delegate coding to Claude Code CLI (features, PRs).  ·  `references/legacy/claude-code.md`  ·  `/root/.hermes/skills/autonomous-ai-agents/claude-code`
+- **codex** — Delegate coding to OpenAI Codex CLI (features, PRs).  ·  `references/legacy/codex.md`  ·  `/root/.hermes/skills/autonomous-ai-agents/codex`
+- **cursor-agent-soul-port** — Use when 把技能库+神魂移植进 Cursor Agent CLI。  ·  `references/legacy/cursor-agent-soul-port.md`  ·  `/root/.hermes/skills/autonomous-ai-agents/cursor-agent-soul-port`
+- **cursor-ide-ops** — Configure and troubleshoot Cursor IDE for agentic work.  ·  `references/legacy/cursor-ide-ops.md`  ·  `/root/.hermes/skills/autonomous-ai-agents/cursor-ide-ops`
+- **hermes-localization** — Use when 把 Hermes 斜杠命令/菜单的硬编码英文汉化成中文。  ·  `references/legacy/hermes-localization.md`  ·  `/root/.hermes/skills/autonomous-ai-agents/hermes-localization`
+- **hermes-model-catalog-ops** — Hermes 里没有某模型/模型改名没同步时用: 实测API拿权威名+三层目录排查。  ·  `references/legacy/hermes-model-catalog-ops.md`  ·  `/root/.hermes/skills/autonomous-ai-agents/hermes-model-catalog-ops`
+- **hermes-model-provider-config** — Add custom model gateways so /model switching works.  ·  `references/legacy/hermes-model-provider-config.md`  ·  `/root/.hermes/skills/autonomous-ai-agents/hermes-model-provider-config`
+- **hermes-model-providers** — Use when adding custom models/keys in Hermes.  ·  `references/legacy/hermes-model-providers.md`  ·  `/root/.hermes/skills/autonomous-ai-agents/hermes-model-providers`
+- **hermes-performance-tuning** — 压缩慢时用: Hermes压缩/辅助模型性能调优, 摘要模型换非推理快模型。  ·  `references/legacy/hermes-performance-tuning.md`  ·  `/root/.hermes/skills/autonomous-ai-agents/hermes-performance-tuning`
+- **installing-skill-suites** — 安装第三方技能套件到 Hermes  ·  `references/legacy/installing-skill-suites.md`  ·  `/root/.hermes/skills/autonomous-ai-agents/installing-skill-suites`
+- **merge-reconciler** — Neutral third-party resolution of agent merge conflicts.  ·  `references/legacy/merge-reconciler.md`  ·  `/root/.hermes/skills/autonomous-ai-agents/merge-reconciler`
+- **opencode** — Delegate coding to OpenCode CLI (features, PR review).  ·  `references/legacy/opencode.md`  ·  `/root/.hermes/skills/autonomous-ai-agents/opencode`
+- **ai-image-gen-integration** — AI生图/写真站建设:APIMart网关接入与人像一致性实测选型。触发:AI写真, 结婚照, APIMart, 生图。  ·  `references/legacy/ai-image-gen-integration.md`  ·  `/root/.hermes/skills/creative/ai-image-gen-integration`
+- **ai-image-generation-api** — Use when generating AI images via multi-model API gateway.  ·  `references/legacy/ai-image-generation-api.md`  ·  `/root/.hermes/skills/creative/ai-image-generation-api`
+- **aigc-image-service** — AI写真/结婚照/发型/素材等AI生图服务集成站搭建: APIMart网关异步接入+模型实测选型。  ·  `references/legacy/aigc-image-service.md`  ·  `/root/.hermes/skills/creative/aigc-image-service`
+- **architecture-diagram** — Dark-themed SVG architecture/cloud/infra diagrams as HTML.  ·  `references/legacy/architecture-diagram.md`  ·  `/root/.hermes/skills/creative/architecture-diagram`
+- **ascii-art** — ASCII art: pyfiglet, cowsay, boxes, image-to-ascii.  ·  `references/legacy/ascii-art.md`  ·  `/root/.hermes/skills/creative/ascii-art`
+- **ascii-video** — ASCII video: convert video/audio to colored ASCII MP4/GIF.  ·  `references/legacy/ascii-video.md`  ·  `/root/.hermes/skills/creative/ascii-video`
+- **baoyu-infographic** — Infographics: 21 layouts x 21 styles (信息图, 可视化).  ·  `references/legacy/baoyu-infographic.md`  ·  `/root/.hermes/skills/creative/baoyu-infographic`
+- **claude-design** — Design one-off HTML artifacts (landing, deck, prototype).  ·  `references/legacy/claude-design.md`  ·  `/root/.hermes/skills/creative/claude-design`
+- **comfyui** — Generate images, video, and audio via diffusion workflows.  ·  `references/legacy/comfyui.md`  ·  `/root/.hermes/skills/creative/comfyui`
+- **design-md** — Author/validate/export Google's DESIGN.md token spec files.  ·  `references/legacy/design-md.md`  ·  `/root/.hermes/skills/creative/design-md`
+- **excalidraw** — Hand-drawn Excalidraw JSON diagrams (arch, flow, seq).  ·  `references/legacy/excalidraw.md`  ·  `/root/.hermes/skills/creative/excalidraw`
+- **female-outfit-director** — 女性穿搭拼贴首帧+卡点换装视频提示词导演。触发:换装视频/变装卡点/穿搭拼贴。  ·  `references/legacy/female-outfit-director.md`  ·  `/root/.hermes/skills/creative/female-outfit-director`
+- **humanizer** — Humanize text: strip AI-isms and add real voice.  ·  `references/legacy/humanizer.md`  ·  `/root/.hermes/skills/creative/humanizer`
+- **manim-video** — Manim CE animations: 3Blue1Brown math/algo videos.  ·  `references/legacy/manim-video.md`  ·  `/root/.hermes/skills/creative/manim-video`
+- **p5js** — p5.js sketches: gen art, shaders, interactive, 3D.  ·  `references/legacy/p5js.md`  ·  `/root/.hermes/skills/creative/p5js`
+- **popular-web-designs** — 54 real design systems (Stripe, Linear, Vercel) as HTML/CSS.  ·  `references/legacy/popular-web-designs.md`  ·  `/root/.hermes/skills/creative/popular-web-designs`
+- **pretext** — Build creative browser demos with DOM-free text layout.  ·  `references/legacy/pretext.md`  ·  `/root/.hermes/skills/creative/pretext`
+- **sketch** — Throwaway HTML mockups: 2-3 design variants to compare.  ·  `references/legacy/sketch.md`  ·  `/root/.hermes/skills/creative/sketch`
+- **songwriting-and-ai-music** — Songwriting craft and Suno AI music prompts.  ·  `references/legacy/songwriting-and-ai-music.md`  ·  `/root/.hermes/skills/creative/songwriting-and-ai-music`
+- **touchdesigner-mcp** — Control TouchDesigner via twozero MCP.  ·  `references/legacy/touchdesigner-mcp.md`  ·  `/root/.hermes/skills/creative/touchdesigner-mcp`
+- **backfill-orchestration** — 补漏/漏采缺口多机并行补齐编排(N台worker增量写回+cron常态化)。  ·  `references/legacy/backfill-orchestration.md`  ·  `/root/.hermes/skills/data-engineering/backfill-orchestration`
+- **bulk-dir-linux-to-windows** — Move a huge dir from Linux server to Windows PC.  ·  `references/legacy/bulk-dir-linux-to-windows.md`  ·  `/root/.hermes/skills/data-engineering/bulk-dir-linux-to-windows`
+- **agent-backup-restore** — Use when 备份/恢复/验证 agent 家当（技能+脚本+记忆+密钥+成果）。  ·  `references/legacy/agent-backup-restore.md`  ·  `/root/.hermes/skills/devops/agent-backup-restore`
+- **email-inbox-triage** — Triage an inbox: prioritize threads, draft replies safely.  ·  `references/legacy/email-inbox-triage.md`  ·  `/root/.hermes/skills/email/email-inbox-triage`
+- **himalaya** — Himalaya CLI: IMAP/SMTP email from terminal.  ·  `references/legacy/himalaya.md`  ·  `/root/.hermes/skills/email/himalaya`
+- **github-auth** — GitHub auth setup: HTTPS tokens, SSH keys, gh CLI login.  ·  `references/legacy/github-auth.md`  ·  `/root/.hermes/skills/github/github-auth`
+- **github-code-review** — Review PRs: diffs, inline comments via gh or REST.  ·  `references/legacy/github-code-review.md`  ·  `/root/.hermes/skills/github/github-code-review`
+- **github-issue-to-pr** — Carry a GitHub issue to a verified PR with honest CI state.  ·  `references/legacy/github-issue-to-pr.md`  ·  `/root/.hermes/skills/github/github-issue-to-pr`
+- **github-issues** — Create, triage, label, assign GitHub issues via gh or REST.  ·  `references/legacy/github-issues.md`  ·  `/root/.hermes/skills/github/github-issues`
+- **github-pr-workflow** — GitHub PR lifecycle: branch, commit, open, CI, merge.  ·  `references/legacy/github-pr-workflow.md`  ·  `/root/.hermes/skills/github/github-pr-workflow`
+- **github-repo-management** — Clone/create/fork repos; manage remotes, releases.  ·  `references/legacy/github-repo-management.md`  ·  `/root/.hermes/skills/github/github-repo-management`
+- **china-court-docs** — 罚款决定书/法院文书解读与复议申请书起草。触发: 罚款决定书, 复议, 民诉法, 电子送达, 执行信息公开网。  ·  `references/legacy/china-court-docs.md`  ·  `/root/.hermes/skills/legal/china-court-docs`
+- **gif-search** — Search/download GIFs from Tenor via curl + jq.  ·  `references/legacy/gif-search.md`  ·  `/root/.hermes/skills/media/gif-search`
+- **heartmula** — HeartMuLa: Suno-like song generation from lyrics + tags.  ·  `references/legacy/heartmula.md`  ·  `/root/.hermes/skills/media/heartmula`
+- **songsee** — Audio spectrograms/features (mel, chroma, MFCC) via CLI.  ·  `references/legacy/songsee.md`  ·  `/root/.hermes/skills/media/songsee`
+- **youtube-content** — YouTube transcripts to summaries, threads, blogs.  ·  `references/legacy/youtube-content.md`  ·  `/root/.hermes/skills/media/youtube-content`
+- **yuanbao** — Yuanbao (元宝) groups: @mention users, query info/members.  ·  `references/legacy/yuanbao.md`  ·  `/root/.hermes/skills/media/yuanbao`
+- **audiocraft** — AudioCraft: MusicGen text-to-music, AudioGen text-to-sound.  ·  `references/legacy/audiocraft.md`  ·  `/root/.hermes/skills/mlops/audiocraft`
+- **evaluating-llms-harness** — lm-eval-harness: benchmark LLMs (MMLU, GSM8K, etc.).  ·  `references/legacy/evaluating-llms-harness.md`  ·  `/root/.hermes/skills/mlops/evaluating-llms-harness`
+- **llama-cpp** — llama.cpp local GGUF inference + HF Hub model discovery.  ·  `references/legacy/llama-cpp.md`  ·  `/root/.hermes/skills/mlops/llama-cpp`
+- **segment-anything** — SAM: zero-shot image segmentation via points, boxes, masks.  ·  `references/legacy/segment-anything.md`  ·  `/root/.hermes/skills/mlops/segment-anything`
+- **serving-llms-vllm** — vLLM: high-throughput LLM serving, OpenAI API, quantization.  ·  `references/legacy/serving-llms-vllm.md`  ·  `/root/.hermes/skills/mlops/serving-llms-vllm`
+- **weights-and-biases** — W&B: log ML experiments, sweeps, model registry, dashboards.  ·  `references/legacy/weights-and-biases.md`  ·  `/root/.hermes/skills/mlops/weights-and-biases`
+- **95306-data-collection-ops** — 95306数据池/菜单B/bot运维与菜单样式对齐, 触发词 95306 菜单B 菜单样式 补漏 采集机 采集端 机队体检 代码漂移 数据池 bot 面板对齐 计数口径 家数对不上 池内 平台  ·  `references/legacy/95306-data-collection-ops.md`  ·  `/root/.hermes/skills/monitoring/95306-data-collection-ops`
+- **obsidian** — Read, search, create, and edit notes in the Obsidian vault.  ·  `references/legacy/obsidian.md`  ·  `/root/.hermes/skills/note-taking/obsidian`
+- **airtable** — Airtable REST API via curl. Records CRUD, filters, upserts.  ·  `references/legacy/airtable.md`  ·  `/root/.hermes/skills/productivity/airtable`
+- **batch-scanned-ocr** — Use when 批量 OCR 扫描件/图片型中文 PDF 时. RapidOCR+fitz 批量纪律.  ·  `references/legacy/batch-scanned-ocr.md`  ·  `/root/.hermes/skills/productivity/batch-scanned-ocr`
+- **box** — Box manages cloud files, sharing, search, and metadata.  ·  `references/legacy/box.md`  ·  `/root/.hermes/skills/productivity/box`
+- **data-gap-closure-verification** — Use when 客户问缺的列能不能补齐:数据缺口核验与值域证伪。  ·  `references/legacy/data-gap-closure-verification.md`  ·  `/root/.hermes/skills/productivity/data-gap-closure-verification`
+- **directory-organization** — Use when tidying a cluttered dir (desktop/downloads).  ·  `references/legacy/directory-organization.md`  ·  `/root/.hermes/skills/productivity/directory-organization`
+- **document-to-action-items** — Extract cited obligations, deadlines, tasks from documents.  ·  `references/legacy/document-to-action-items.md`  ·  `/root/.hermes/skills/productivity/document-to-action-items`
+- **google-workspace** — Gmail, Calendar, Drive, Docs, Sheets via gws CLI or Python.  ·  `references/legacy/google-workspace.md`  ·  `/root/.hermes/skills/productivity/google-workspace`
+- **maps** — Geocode, POIs, routes, timezones via OpenStreetMap/OSRM.  ·  `references/legacy/maps.md`  ·  `/root/.hermes/skills/productivity/maps`
+- **meeting-action-items** — Turn meeting notes into cited decisions, owners, tickets.  ·  `references/legacy/meeting-action-items.md`  ·  `/root/.hermes/skills/productivity/meeting-action-items`
+- **notion** — Notion API + ntn CLI: pages, databases, markdown, Workers.  ·  `references/legacy/notion.md`  ·  `/root/.hermes/skills/productivity/notion`
+- **pdf** — PDF files: create, read, merge, fill, OCR, edit text.  ·  `references/legacy/pdf.md`  ·  `/root/.hermes/skills/productivity/pdf`
+- **powerpoint** — Create, read, edit .pptx decks with python-pptx.  ·  `references/legacy/powerpoint.md`  ·  `/root/.hermes/skills/productivity/powerpoint`
+- **product-photo-sourcing** — Use when 要给实物找全网真实实拍图,或判断商品图是实拍还是AI图. 图库批量抓取+真伪判据+图册交付.  ·  `references/legacy/product-photo-sourcing.md`  ·  `/root/.hermes/skills/productivity/product-photo-sourcing`
+- **product-price-monitor** — Watch product, flight, or listing prices; alert on target.  ·  `references/legacy/product-price-monitor.md`  ·  `/root/.hermes/skills/productivity/product-price-monitor`
+- **weekly-review-planning** — Weekly reset: commitments, stalled work, next-week plan.  ·  `references/legacy/weekly-review-planning.md`  ·  `/root/.hermes/skills/productivity/weekly-review-planning`
+- **xlsx** — Create, read, edit Excel .xlsx workbooks and CSVs.  ·  `references/legacy/xlsx.md`  ·  `/root/.hermes/skills/productivity/xlsx`
+- **arxiv** — Search arXiv papers by keyword, author, category, or ID.  ·  `references/legacy/arxiv.md`  ·  `/root/.hermes/skills/research/arxiv`
+- **authoritative-intel-intake** — Use when 外部情报/清单落库或补录:增量追加+回读校验+探针自测。  ·  `references/legacy/authoritative-intel-intake.md`  ·  `/root/.hermes/skills/research/authoritative-intel-intake`
+- **competitor-news-monitor** — Watch named companies for material news; cited digests.  ·  `references/legacy/competitor-news-monitor.md`  ·  `/root/.hermes/skills/research/competitor-news-monitor`
+- **grounded-citations** — Ground answers and documents in cited, verifiable sources.  ·  `references/legacy/grounded-citations.md`  ·  `/root/.hermes/skills/research/grounded-citations`
+- **llm-wiki** — Karpathy's LLM Wiki: build/query interlinked markdown KB.  ·  `references/legacy/llm-wiki.md`  ·  `/root/.hermes/skills/research/llm-wiki`

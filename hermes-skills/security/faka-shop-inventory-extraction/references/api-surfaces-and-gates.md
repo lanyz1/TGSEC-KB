@@ -1,0 +1,77 @@
+# API surfaces and gates — ACG 3.1.1 / 5.x, gateways, operator infra
+
+## ACG 3.1.1 — Shared API (merchant integration)
+
+Auth = `app_id` (user id) + `sign`. Sign = non-empty scalar fields except `sign`, keys sorted, joined `k=v` with `&`, plus `&key=<app_key>`, md5.
+
+| Path | Body | Returns |
+|---|---|---|
+| `/shared/authentication/connect` | `{}` | shopName, balance |
+| `/shared/commodity/items` | `{}` | catalog tree (`children`) |
+| `/shared/commodity/item` | `sharedCode` | one product |
+| `/shared/commodity/inventory` | `sharedCode`, `race` | count, delivery_way, draft_status, price, config |
+| `/shared/commodity/inventoryState` | `shared_code`, `card_id`, `num`, `race` | stock check for a pre-selected card |
+| `/shared/commodity/draftCard` | `sharedCode`, `page`, `limit`, `race` | `[{id, draft}]`, draft_status=1 only |
+| `/shared/commodity/trade` | `shared_code` + order fields | forces balance pay (pay_id=1) |
+| `/shared/commodity/query` | `tradeNo` | order secret, owner-checked |
+
+## ACG 3.1.1 — user side
+
+- `POST /user/api/authentication/login {username,password}` → `USER_SESSION` JWT + `ACG-SHOP` session cookie.
+- `POST /user/api/authentication/register` — no email whitelist on 3.1.1.
+- `POST /user/api/security/resetKey {old_password}` → `app_key` (32-hex on deployed builds).
+- `POST /user/api/index/{tradeAmount,trade,secret,query,commodity}`
+  - `secret {orderId}` — no owner check, only `status==1`, returns plaintext `secret`.
+  - `query {keywords}` — exact match on `trade_no` OR `contact`.
+- `POST /user/api/card/{data,save}` — owner forced to session user; `save` imports lines formatted `secret#[draft]#`, empty draft if marker absent.
+- `POST /user/api/upload/handle` — field `file` (wangEditor), server renames to timestamp, image extension whitelist only.
+- Map-query controllers (Cash/Commodity/Index/AgentMember/Category/PurchaseRecord/Bill/CommodityOrder/Coupon/Card) build WHERE from POST keys `equal-|search-|betweenStart-|betweenEnd-|middle-<column>`; deployed builds regex-whitelist the key.
+
+## ACG 5.x — client crypto and endpoints
+
+- `Secret = <REDACTED> — computed client-side, sent as the `Secret` header.
+- Request body: AES-CBC, key = iv = `Secret[:16]`, base64.
+- `Signature = md5(<sorted k=v joined by &> + "&key=***" + Secret)`.
+- **Responses AES-encrypted with the `Secret` response header** (fall back to the request secret).
+
+| Path | Body | Notes |
+|---|---|---|
+| `POST /shop/order/trade` | `items:[{sku_id,email,quantity}]` | guest order; trade_no 24 digits (`9`+YYMMDD+HHMMSS+11 random) |
+| `POST /shop/order/getOrder` | `trade_no`, `item_id` | `data.treasure` only when paid |
+| `POST /pay` | `trade_no`, `method`, `balance` | returns internal pay_url |
+| `POST /pay/getOrder` | `trade_no` | status, render_mode, real gateway pay_url |
+| `POST /pay/list` | `business`, `amount` | `业务不存在` = signature OK, not auth failure |
+| `POST /login` | `email`, `password` | uniform `密码错误` |
+| `POST /register` | `username,email,captcha,email_code,password,password_re` | email suffix whitelist |
+| `GET /register/captcha` | — | 160x52; binarize + morphological open, then tesseract |
+| `POST /sendEmail?type=register` | `email`, `captcha` | suffix check only |
+| `POST /user/trade/order/get` | page/limit | param check runs before auth |
+| `GET /search?tradeNo=` | — | public session bootstrap |
+
+Route scheme from `ready.js`: pages `/plugin/<name>/<uri>` (main) and `/plugin/<uid>/<name>/<uri>` (sub-site); assets `/app/Plugin/<name>/Assets/...`. Page controllers are `/assets/user/controller/<path>.js?v=<ver>`, named by the page's inline `ready("...")`.
+
+### Public tools surface (no auth)
+
+- `GET /tools/api/mail-server?keywords=`
+- `GET /tools/api/mail-reader/providers`
+- `POST /tools/api/mail-reader/read {provider,protocol,email,password,limit}`
+- `POST /tools/api/outlook-mail/read {account_line,folder,limit}`
+- `POST /tools/api/google-account/check {emails:[]}`
+- `POST /tools/api/facebook-live {uids:[]}`
+- `POST /tools/note/save {content,password,expire_hours,burn_after_read}` — anonymous, returns 6-hex code
+- `GET /tools/note/detail?code=&password=` — public read
+- `POST /tools/note/list|del` — login required
+
+## Payment chain
+
+- Checkout page renders pay methods server-side as `data-payId`; `/pay/getOrder` then returns the real gateway URL (render_mode 0 = BEpusdt, 3 = Alipay dynamic QR).
+- BEpusdt (github v03413/BEpusdt): `POST /api/v1/pay/info {trade_id}` is unauthenticated and returns TRON deposit address, actual_amount, order_id, redirect_url. Admin secure path = `"/" + sha256(md5(time))[:10]`; admin user/password random at first run — not guessable, do not brute.
+- Alipay 当面付 QR is per-order; callback RSA-signed by Alipay — no forge path.
+- Epay plugins verify `md5(sorted + key)` server-side with `IS_SIGN` forced true.
+
+## Operator infra — quick ceilings
+
+- **Werkzeug debug console** (Flask dev server): console page leaks `SECRET`, `EVALEX_TRUSTED=false`. Exec protocol: `GET /console?__debugger__=yes&cmd=<py code>&frm=<frameid>&s=<SECRET>`, gated by `check_pin_trust`. PIN = sha1 over (username, modname, appname, modpath, uuid.getnode(), machine-id) and 10 bad pinauth attempts lock the process — without machine-id + MAC it is unbruteable. Use the traceback frames (source path, code context, locals) as recon and pivot.
+- **BEpusdt API port** answers `hello epusdt, https://github.com/assimon/epusdt` at `/`; `/admin` 404s because admin routes need the random secure-path session first.
+- **Account-processing bots**: menu stock counts are live inventory; uploads require valid session/tdata archives plus per-account permission, invalid archives are ignored silently; `/start <param>` referral params do not change identity.
+- **BT panel servers**: port 888 = phpMyAdmin vhost with randomized path; MySQL 3306 may be open but every account is localhost-only (`ERROR 1130` from external IP) — an open port is not a credential path.

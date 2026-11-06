@@ -1,0 +1,14 @@
+## Rationalizations to Reject
+
+- **"`unsafe` is rare, so hand-skip the memory-safety cluster."** Don't edit the cluster list — set `has_unsafe` accurately in Phase 1 and let `build_run_plan.py` decide. Every memory-safety bug class (UAF, double-free, uninitialized reads, `Vec::set_len`, union UB) requires `unsafe`, so the planner runs the **whole** `memory-safety` cluster when `has_unsafe=true` and correctly omits it when `false` — there is no "run it anyway." The **unsafe-boundary** cluster is different: it has no `requires` and always runs (consolidated; its safety-doc and `repr(C)` hygiene apply to FFI declarations even without visible `unsafe { }` blocks).
+- **"The compiler caught it."** The borrow checker proves absence of safe-code data races; it proves nothing about unsafe blocks, panic reachability, ABBA deadlocks, atomic-load/store sequencing, or FFI ABI mismatch.
+- **"`unwrap()` is fine if it's `// SAFETY: documented infallible`."** `// SAFETY:` documents `unsafe` operations, not infallibility claims. An `unwrap()` on documented-infallible input is still risky if the documentation is wrong — file as low severity and let the FP judge decide.
+- **"`has_unsafe=false` so skip the run."** Pure safe-Rust crates still have panic-DoS, atomic races, drop-panics, and trait-implementation hazards. Run the always-on clusters.
+- **"Background spawns parallelize the workers."** They do not — `Agent` calls in a single assistant message already run concurrently. `run_in_background=true` defeats the Phase 6a primer cache, so every worker pays full cache-creation (`cache_read_input_tokens=0`) and the ~15 K-token primer is wasted M times. Default: omit `run_in_background` from worker spawns.
+- **"I'll re-derive the cluster list / paths / pass prefixes inline instead of running `build_run_plan.py`."** The script is the only authority for selection and rendering. Paraphrasing it drops fields that the worker self-check requires, producing `worker-N abort: spawn prompt malformed`. Always run the script and `Read plan.json`.
+- **"The run partially succeeded — I'll just write `REPORT.md` from what completed."** Hiding partial runs behind a successful report is a correctness bug. If any Phase-5 cluster task is not `completed`, surface it prominently in `run-summary.md` and the final response.
+- **"Zero findings — skip Phase 8."** Always run both judges and Phase 8b: dedup-judge writes a minimal no-op `dedup-summary.md` on an empty index, fp-judge writes empty `REPORT.md`/`REPORT.sarif`, and Phase 8b's SARIF generator emits `results: []` for the empty case. SARIF consumers depend on a stable artifact set.
+- **"`Bash: ls README*` is fine for the preflight."** Under zsh, an unmatched glob aborts the whole compound command before `2>/dev/null` runs. Use `find` (never fails on no-match) — and not `Glob`, which is unavailable to an agent that also holds `Bash`.
+
+---
+

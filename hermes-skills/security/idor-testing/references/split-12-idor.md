@@ -1,0 +1,31 @@
+## 十一、IDOR测试清单（高级版）
+
+- [ ] 所有带ID的参数（GET/POST/JSON/路径/Header/Cookie）
+- [ ] 水平越权（同角色访问其他用户数据）
+- [ ] 垂直越权（普通用户访问管理员功能）
+- [ ] ID枚举（自增ID/订单号/流水号规则分析）
+- [ ] **可预测标识符分析**：UUIDv1时间戳解码、雪花/顺序ID分解、熵分析（第六章）
+- [ ] **编码ID逆向**：Base64/Base62/Hashids解码重编码、salt爆破
+- [ ] 静态文件/下载/云存储URL越权（签名URL是否绑定用户）
+- [ ] 批量分配（role/is_admin/balance + __proto__原型污染）
+- [ ] 搜索/导出/批量接口全量数据泄露
+- [ ] **关系链IDOR**（order→user→profile多级嵌套）
+- [ ] **间接引用绕过**（分享码/映射表/短码可预测、引用码不绑定用户）
+- [ ] **多租户IDOR**（X-Tenant-ID/子域/JWT claim跨租户切换、缓存键缺租户维度）
+- [ ] **LLM/AI平台IDOR**（flow/thread/knowledge/credentials跨租户、/run执行端点）
+- [ ] GraphQL introspection+节点查询+fragment字段级绕过
+- [ ] REST方法覆盖（GET/POST/PUT/DELETE/PATCH）
+- [ ] 参数污染/HPP（多参数名/大小写变体/数组/逗号）
+- [ ] Content-Type变换（JSON→form→xml）
+- [ ] 路径归一化绕过（尾斜杠/双斜杠/./;x=/版本切换）
+- [ ] Referer/Origin绕过
+- [ ] WebSocket频道订阅/CSWSH
+- [ ] API版本切换（v1/v2）
+- [ ] 密码重置/验证码越权（token绑定/可预测/枚举）
+- [ ] 文件上传后访问越权
+- [ ] 竞态条件场景（TOCTOU）
+- [ ] 支付/订单流程（订单ID篡改）
+- [ ] JWT Token篡改（alg=none/弱密钥/RS256→HS256/kid/jku）
+- [ ] HTTP头注入用户ID（X-User-ID/X-Forwarded-User）
+- [ ] **自动化BOLA检测**（多账户diff：状态码+body哈希+字段存在性）
+

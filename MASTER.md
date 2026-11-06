@@ -1,0 +1,149 @@
+---
+name: tgsec-suite
+description: "Use for attack-surface domain knowledge matrix."
+---
+
+# 安全知识库 · TGSEC 一体化导航
+
+> 小白入口：[`START.md`](START.md) · 全 AI 路径表：[`ROUTING.md`](ROUTING.md)
+>
+> **本轮（2026-10-17）：** abraxas 增量批 — 83 新包（pfSense CE×44 · OpenMeetings×10 · pfSense-API×9 · Spark×9 · OPNsense×7 · vsftpd×3 · tomcat+1）+ 研究卡（Atlassian **21589** 预认证任意文件读 9.3 · TG Desktop **107181** 盗 tdata · WP **15826** 类型混淆建超管 9.8）+ nextjs **55182** + 工具/词表/靶场 ×26（Web-Fuzzing-Box · ClatScope · HUNT · keyhunter · CloudRip · bypass-403 · ffufai · XNLDorker …）；**署名清仓归零**。说明 [`UPDATE-2026-10-17.md`](docs/updates/UPDATE-2026-10-17.md) · 融合批次 [`README.md`](README.md) 第十节。
+>
+> **上一轮（2026-10-12）：** ① 0day 批 — 外部 158 仓差分吸收（145 包 + AnyDesk AnyPwn；**署名清仓**）；② **报告包 B 批 — 本地独有经验迁移**（127+7 技能卡 · case-lessons +14 · GPU 域 05-07 扩编 · loot/PII 硬闸拒收）。说明 [`UPDATE-2026-10-12.md`](docs/updates/UPDATE-2026-10-12.md) · 融合批次 [`README.md`](README.md) 第十节。
+
+> **全 AI 先读 [`ROUTING.md`](ROUTING.md)**（关键词→路径，不绑 Hermes）。再本表定域。
+
+> **任意 AI 打开本仓：先 `bash scripts/bootstrap.sh`，再读 AGENTS.md。**
+
+
+按攻击面组织的安全知识矩阵 — **25 个主题域、约 29800+ 个文件**，一个目录直达。
+
+Clone 后目录一般为 `~/security-suite`（Windows: `%USERPROFILE%\security-suite`）  
+融合索引: `domains/FUSION-6000.md` · `domains/FUSION-20260920-absorb.md`  
+**实战报告总入口（渗透中途强制）：** [`domains/CASE-INDEX.md`](domains/CASE-INDEX.md)
+
+## 使用方式
+
+1. 活靶先 `skill_view(pentest-execution)` + `tgsec-suite`
+2. 定攻击面 → 读 `domains/<主题>/README.md`
+3. **查实战课** → 读 `domains/CASE-INDEX.md`，同面至少打开 1 篇 `case-lessons/`（无命中则注明）
+4. 同面优先: `case-lessons/` → `playbook-6000/` → `hunter-6000/` → `src-methods/` → 其它
+5. APK/IPA/二进制逆向 → `reverse-skill` + `master-route.sh`
+6. 组件/版本已识别 → `domains/recon/component-vuln-intel/`
+
+## 主题矩阵
+
+| 主题域 | 覆盖 | 文件 |
+|--------|------|------|
+| `recon` | 侦察情报 — 子域/端口/OSINT/组件CVE情报/FOFA/SRC规则/playbook | 1112 |
+| `web-injection` | Web注入 — SQLi/XSS/SSRF/XXE/反序列化/Fastjson/Shiro/Log4j/Spring | 1271 |
+| `web-attack` | Web攻击 — CSRF/CORS/走私/缓存投毒/WAF/竞态/重定向 | 173 |
+| `api-security` | API安全 — GraphQL/JWT/OAuth/IDOR·BOLA/网关/未授权 | 83 |
+| `auth-security` | 认证授权 — 认证绕过/IDOR/OAuth-JWT/401-403/SSO | 112 |
+| `file-vulns` | 文件漏洞 — 上传/LFI-RFI/路径穿越/SCM泄露 | 410 |
+| `business-logic` | 业务逻辑 — 支付绕过/越权/竞态/威胁建模/发卡钱包案 | 78 |
+| `ad-attack` | AD域攻击 — Kerberos/ACL/ADCS/NTLM/BloodHound | 250 |
+| `windows-post` | Windows后渗透 — 提权/横移/凭证/免杀/EDR | 105 |
+| `linux-post` | Linux后渗透 — 提权/隧道/持久化/内网横移 | 143 |
+| `cloud-security` | 云安全 — AWS/Azure/GCP/K8s/容器/CI-CD | 296 |
+| `mobile-security` | 移动端 — Android/iOS/APK/Frida/iOS26.6内核CVE | 84 |
+| `binary-pwn` | 二进制Pwn — 栈堆/ROP/fuzz/shellcode/exploit dev | 62 |
+| `reverse-engineering` | 逆向工程 — PE/ELF/脱壳/调试/固件/协议 | 366 |
+| `crypto-attacks` | 密码学攻击 — RSA/对称/格子/哈希/链上 | 23 |
+| `llm-ai-security` | AI/LLM安全 — Prompt注入/RAG/Agent/MCP | 110 |
+| `post-exp-tools` | 后渗透工具 — C2/隧道/代理/Webshell/凭据 | 158 |
+| `malware-dfir` | 恶意样本与取证 — YARA/IR/内存/vuln-memory | 82 |
+| `social-eng` | 社会工程 — 钓鱼/水坑/意识培训/物理 | 68 |
+| `ctf` | CTF与靶场 — Web/Pwn/Crypto/Reverse/报告样例 | 1743 |
+| `0day-exploits` | 0day漏洞库 — 产品RCE PoC/自动利用 | 11308 |
+| `redteam-framework` | 红队框架 — 状态机/多阶段/lyan工作流 | 534 |
+| `gambling-pentest` | 赌博平台 — BFLA/支付/代理/WebSocket | 18 |
+| `wireless` | 无线 — WiFi/BLE/Zigbee/Z-Wave/LoRa | 29 |
+| `other` | 其他 — 框架专项/自动化/代码审计 | 138 |
+
+## 渗透闭环
+
+```
+侦察(recon) → 漏洞发现(web-*/auth-*/file-*/api-*) → 漏洞利用(0day-exploits)
+→ 后渗透(linux-post/windows-post) → 横移 → 凭据收集 → 数据提取 → 报告
+```
+
+## 5 步路由
+
+1. **定阶段**: 侦察 → 注入/绕过 → 提权 → 后渗透/横向 → 报告
+2. **定攻击面**: 选上方主题域
+3. **读索引**: `domains/<主题>/README.md`
+4. **入子目录**: playbook-6000 / hunter-6000 / src-methods / 专项
+5. **交叉引用**: 同技术多角度并存，取所需
+
+## 6000RMB Skills 包融合
+
+来源 zip **按攻击面拆入 domains/**（禁止按仓库名堆叠）：
+
+| 来源块 | 融合位置 |
+|--------|----------|
+| Skills20260809（30 playbook） | 各域 `playbook-6000/<name>/` |
+| hunter-skills（37 offensive） | 各域 `hunter-6000/<name>/` |
+| skill1 渗透工作流 | `redteam-framework/pentest-lyan-workflow/` |
+| vuln-hunter | `malware-dfir/vuln-hunter-memory/` |
+| component-vuln-intel | `recon/component-vuln-intel/` |
+| 实战报告样例 | `domains/*/case-lessons/`（提炼；全文卷已撤库） |
+| clown 知识库 | 已有 `src-methods/` 哈希去重 |
+
+## 技能路由（Hermes）
+
+| 场景 | skill |
+|------|-------|
+| 活靶渗透/深挖/攻击链 | `pentest-execution` |
+| 攻击面知识库 | `tgsec-suite`（本仓库） |
+| CDN/WAF 源站溯源 | `cdn-origin-tracing` |
+| APK/IPA/JS/二进制逆向 | `reverse-skill` |
+| Web 注入/API playbook | `hack-skills` + `web-sec` |
+| 产品 0day RCE | `0day-exploit-library` |
+| PHP/Java 白盒审计 | `domains/file-vulns/code-audit/` |
+| Cloudflare 白盒多智能体审计提炼 | `domains/file-vulns/code-audit/cloudflare-security-audit/` |
+| CVE 情报批次 2026-09-21 | `domains/0day-exploits/INGEST-20260921-INDEX.md` |
+| iOS26.6/65343/KASLR 研判 | `mobile-security/ios-kernel-cve/ANALYSIS.md` |
+
+## 打开即配置 / 旧机器覆盖
+
+```bash
+bash scripts/bootstrap.sh            # 任意 AI/人类：配齐 Claude/Cursor/Codex/Aider/Grok/Hermes
+bash scripts/bootstrap.sh --force --pull
+bash scripts/reinstall-tgsec.sh      # clone/pull + bootstrap 一条龙
+```
+
+## AI 工具配置
+
+```
+ai-config/hermes/    — Hermes 一键配置
+ai-config/claude/    — Claude Code
+ai-config/codex/     — OpenAI Codex
+ai-config/grok/      — Grok CLI
+ai-config/cursor/    — Cursor
+ai-config/aider/     — Aider
+ai-config/universal/ — 通用 PERSONA/MEMORY/RULES
+```
+
+## 更新日志
+
+- 2026-09-04: P0+P1 外部仓按攻击面融合（PHP/Java 白盒细粒度、WinDump 采集面、LPE 编排、Web 评估门禁流水线、recon-skills 增量、Android ADB、CTF 补强、OT/合规薄域抽样）；CDN 溯源技能已挂路由
+- 2026-09-03: iOS 26.6 内核 CVE 研判卡融入 mobile-security
+- 2026-09-03: 6000RMB skills 按攻击面融合；MASTER/README 校准；空目录清理；lyan 双结构压平
+
+---
+@TGSEC社区 · @TGSEC-Qtzuu 整理
+
+<!-- fused:batch-20260908 -->
+## 知识融合批次 2026-09-08
+
+- TORCH wiki+hunt+workflow → 各域 `torch-*`
+- P4nda0s reverse-skills → `reverse-engineering|mobile-security/panda-rev`
+- SQL-Wordlist → `web-injection/Payload/sqli/*orwa*`
+- exploitarium → `0day-exploits/<product>/exploitarium/` + EXPLOITARIUM-INDEX.md
+- AboutSecurity/hack-skills：本地已与 origin 对齐，Payload/Dic/Vuln 增量同步
+- 报告: `/root/_kb_ingest_20260908/FUSION-REPORT-20260908.md`
+
+
+@TGSEC社区 · @TGSEC-Qtzuu 整理
+

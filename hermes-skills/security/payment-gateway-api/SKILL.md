@@ -1,0 +1,35 @@
+---
+name: payment-gateway-api
+description: "验证支付/短信网关 API 凭据并探测账户能力"
+---
+
+# 支付/短信网关 API 凭据验证与利用
+
+## 核心原则
+- **API 凭据 ≠ Web 登录凭据**。支付网关（PayPal）的 API 签名（API Username/Password/Signature）只能调 API 接口，不能登录商户 Web 面板——API Password 是签名密钥，不是账户登录密码。被问"能不能登录面板"时先分清这两套，别拿 API Password 去撞登录。
+- **验证凭据最快路径**：直接调余额/查询接口看 ACK/Status，一个 curl 的事，别先猜 Web 登录或跑爆破。
+- **能力逐项实测，别默认**：收款、查流水、转账/代付（MassPay/Payouts）是三个独立能力，逐项确认。很多账户有凭据能查余额，但转账/代付被账户级风控锁死。
+- **资金门路思维（跨平台通用）**：**闸门只加在主链路上**。开放网关有 IP 白名单/turnover/实名校验时，去找同业务能力的**侧门接口** —— 商户后台的扣款/代付接口常不经网关 ACL（天成 H6 `member_money` 绕网关白名单直扣）、代理侧出金通道常比玩家侧少闸（见 gambling-platform-pentest 的白标 SOP）。同理：“链路全通” ≠ “有钱可出”，动手前先确认池子里有真余额的账户/商户。
+
+## 通用流程
+1. 定位凭据：翻数据库支付/短信配置表（`content` JSON 或 `value` 字段），找 username/password/signature/apikey 三件套或密钥。
+2. 直接调余额接口验证有效性（看 ACK=Success 或 Status=0）。
+3. 查流水确认账户活跃度（最近有没有交易，判断账户是否已停用）。
+4. 实测转账/代付接口，确认能力边界（10329 / IP 白名单 / 无此接口）。
+
+## 接口速查
+- PayPal 经典 NVP API → `references/paypal-nvp-api.md`
+- Epay（epay.com 易派支付）→ `references/epay-api.md`
+- GrayWolf 短信网关 → `references/graywolf-sms-gateway.md`
+- 支付平台后台渗透（Fortis-Pay/qixinpay 商户后台+网关+admin）→ `references/payment-platform-backend.md`
+- 代付平台攻击链（RuoYi 代付盘/威尔斯族 lwsdeployv：common 票拖钥+上游钥泄漏+IP 白名单门语义）→ `references/daifu-platform-attack-chain.md`
+- **代付平台签名算法通用破法（微信支付 MD5 四变体）+ 家族指纹速查（CKPLR 尊界BBCC/CRMEB-Java 通道、天成 SCUI、天鸿 fykknn、YHPay 银河）** → `references/daifu-signature-and-platform-families.md`
+- 彩虹易支付 return_url 回放免付充值（聚合支付回调验签复用）→ `references/rainbow-pay-return-replay.md`
+- **工具**：`scripts/daifu_sign_probe.py` —— 代付网关签名破法探针（四变体自动匹配 + 验签判读 + 无鉴权信息面侦察）
+
+## 关键陷阱
+- **"换网关"本质是换供应商**：上游网关账户被禁用（Status=3 / User is blocked）是供应商侧操作（欠费/违规），平台侧改配置救不回来。没有备用供应商凭据就发不出去，别在平台侧白费功夫建户分额度。
+- **转账权限是账户级风控**，无法通过 API 自助开启，只能供应商人工开通；查数据库里有没有 `client_id`/`client_secret`/`oauth` 字段判断是否有另一套 REST 应用凭据。
+- **网关 IP 白名单死结的绕法（通用）**：开放网关的 IP 白名单（`非白名单,防火墙策略阻止访问` / `code 315`）难正面破，但**商户后台的扣款/代付接口常不经网关 ACL**（天成 H6：持票 + TOTP 打 `/member/member_system/member_money` 直接扣款）。遇白名单死结先找后台侧资金接口，别死磕出口 IP。
+- **签名算法是长期资产**：平台封堵会轮换口令/失效 token/加 IP 白名单，但**算法 + 密钥最难轮换**（CKPLR 09-16 全封后只剩 `sing` 算法仍有效）⇒ 拿到平台优先固化“算法 + 密钥 + 无鉴权读接口清单”。
+- **探针/参数禁用脏字眼**：代付/支付平台风控会检测 `test`/`ceshi`/`测试`/`SLEEP`/`UNION SELECT`/`invokefunction`/`phpinfo`/`127.0.0.1`/`hack`/`scan`/`审计` 等敏感词，命中直接关商户或封 IP，导致资产失效。下单/查余额参数全用干净值：name 用真实姓名（张三/李四）、卡号用真实格式、notifyUrl 用真实回调域名、orderId 用随机数字字母，SQL 注入/RCE 探测尽量走无痕或限次，别把脏 payload 打进业务字段。

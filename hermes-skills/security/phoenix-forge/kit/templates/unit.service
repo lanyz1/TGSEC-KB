@@ -1,0 +1,16 @@
+# systemd 主单元（落点 /etc/systemd/system/<SVC>.service）
+[Unit]
+Description=System App Node Supervisor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/bin/sh -c "while true; do /bin/sh <BASE>/fguard-heal.sh; sleep 60; done"
+Restart=always
+RestartSec=15
+User=root
+Nice=15
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,104 @@
+---
+name: skill-engineering
+description: >-
+  本库技能工程：怎么写卡、商店收编、交货完整性、三件套缺口。
+  触发：技能商店、skill-main、技能怎么写、交货完整性、skill_catalog、skill_own。
+  整库盘点张数走 engine-distill，不要手改 AGENTS 张数。
+---
+
+# 技能工程规范
+
+## 真源
+
+- `docs/playbooks/技能工程规范.md`
+- `python3 tools/ops/skill_catalog.py doctor`
+- `python3 tools/ops/skill_own.py`
+- `python3 tools/ops/skill_store_sync.py`
+- `python3 tools/ops/skill_store_adopt.py`
+
+```bash
+python3 tools/ops/skill_catalog.py list
+python3 tools/ops/skill_catalog.py validate
+python3 tools/ops/skill_catalog.py doctor
+```
+
+打站专卡必须 Playbook + Skill + 探针。同族重复并进已有专卡，旧入口改 stub。
+
+
+---
+
+## 外部库增量（2026-10-11 分享包）
+
+## 检索入口（先搜后载，别靠全量列表碰运气）
+
+1073 张卡不可能全载进上下文；**先用索引搜，再 `skill_view` 命中卡**：
+
+```bash
+python3 tools/ops/skill_index.py build            # 重建（~3s，1073 卡 -> docs/skill-index.json/.md）
+python3 tools/ops/skill_index.py search "报错注入 取数" --top 5
+python3 tools/ops/skill_index.py paths "贝叶斯"     # 只出卡名，直接喂 skill_view
+```
+
+- 索引含 Hermes 运行副本 + skill-store 两份，同名以 Hermes 副本为准；自动跳过 `.archive`。
+- 查询用**稀有词**（专有名/型号/漏洞名/产品名）最准；多词模糊查询只取 top3 人工判，别信 top8。
+- **新增/改名/拆分卡后必须重跑 `build`**，否则搜不到（会误判成「本库没这张卡」）。
+
+## 探针交付纪律（实战教训）
+
+- 探针放卡同级的 `scripts/`，**必须自带本地 mock 靶机**（`scripts/mock_*_target.py`），
+  卡里写上自测记录表——没跑过的探针不要交给用户。
+- 自测至少三例：① 正常命中并取回真实输出 ② 落盘+读回（长任务路径）
+  ③ 不可达/错参数 → 不命中 + 非 0 退出码 + 排查清单。
+- mock 要**忠实模拟目标语义**，否则自测等于自嗨：如 PHP 的 session 文件是**边收 body 边写**、
+  `upload_progress.cleanup=On` 是**响应后即删**——mock 里必须照此实现，才能验出真实窗口行为。
+- 装进 skill 时用 `cp` 复制**已实测的那份字节**（不要重打一遍），装后校验 hash 一致 + `py_compile`，
+  并清掉 `__pycache__`。
+- Windows 本机 mock 里 `subprocess.run(["bash","-c",...])` 会落到 WSL 的 bash
+  （报 `execvpe(/bin/bash) failed`）⇒ 用 `shutil.which("bash")` 取到的路径，并把它所在目录前置进 `PATH`。
+
+## 大卡拆分与容量治理（100K 硬限）
+
+- **症状**：`skill_manage` 报 `SKILL.md content is 134,604 (335 chars)` —— skill 卡超 **100,000 字符硬限**后**任何 patch 都被整体回滚**，卡从此不可维护。发现即拆，别等要改时才撞墙。
+- **拆分法（字节平移，不走手抄）**：用 `execute_code` 读源卡 `split('\n')`，按章节边界切片直接写 `references/<主题>.md` —— 内容只在磁盘间流转、不经过工具参数，**不会触发长内容截断**；SKILL.md 只留索引 + 高频操作 + 本库增量。
+- **切分点纪律**：先扫标题行号与各节字符量（**跟踪 ``` 围栏，只在围栏外匹配 `^## `**，否则代码块里的注释会被误判成标题），再核对切分点落在 `---`/空行上，别切断代码块与表格。
+- **拆分后必做三项验证**：① `skill_view` 看 `linked_files` 是否列全分册；② 每分册写后读回打印**尾部 45 字符**确认未截断；③ **内容守恒审计** —— 原文非空行集合 −(新 SKILL.md + 全部分册) 非空行集合，差集只能剩“故意改写的行”。注意用 `set` 差集 + 归一化比对旧卡，**多重集计数会因去重段假报**。
+- **去重**：卡内常见“正文全文 + 末尾精炼版副本”双份结构，拆分时删副本、只留一行指针（副本已在另一张卡就指向那张卡）。
+- **容量目标**：SKILL.md 控在 ~15-20K（余量 80K+），单分册 ≤ ~30K；命名按主题（`methods-01-15.md` / `vendor-bypass.md` / `verification-and-scoring.md`），新增量写对应分册而非堆主体。
+- **卡里别写外部镜像路径**：`D:\...\<原名>\SKILL.md` 这种引用在拆分后即失效，改成指向库内 `references/`。
+
+## 分发层一致性（三件套缺口高发区）
+
+同一张卡在本库有 **4 个副本**，改一处 ≠ 改完：
+
+1. Hermes 运行副本 `profiles/123/skills/security/<卡>/SKILL.md`（`skill_manage`/`patch` 的落点）
+2. 真源长文 `docs/learning/shizhan-pack/skills/<域>/<卡>/SKILL.md`
+3. 全文仓 `docs/learning/skill-store/skills/<卡>/`（**自动**：`hermes_skill_sentinel.py sync --apply`）
+4. 工作副本 `.cursor/skills/<卡>/SKILL.md`（**只有带 `pack:` 头的才自动 regen**）
+
+- **手工打站卡（无 `pack:` 头）被 `skip_biz` 跳过，sentinel 永不刷新** —— 改完 ①② 后必须手工 patch ④，
+  否则用户在 Cursor 里读到的还是旧卡（这就是"三件套缺口"）。API 类带 `pack: survey-skill` 的卡会自动 regen，
+  不要手改（会被覆盖）。
+- 收尾固定动作：`sync --apply` → `skill_catalog.py validate`（应 `fail=0`）→ 逐卡 `list` 看 grade 是否 `full`
+  → 核对每个副本的字节数与关键标题都在。
+
+## 探针改动纪律（本库实际布局）
+
+- 探针落 `tools/ops/<name>.py`，自测落 `tools/ops/selftest_<name>.py`（本库以 `tools/ops/` 为准）；
+  新增子命令后**必须**：`--help` 确认子命令挂上 → 本地 mock 端到端跑 → 断言脚本自己拉起 mock
+  （`HTTPServer` + 线程 + `subprocess.run` + `srv.shutdown()`，**不留残留进程**）。
+- 新子命令同步登记到 `tools/ops/auto_campaign.py` 的作战条目（`cmd_template` / `note`），否则自动化计划里没有它。
+- 碰他人凭据的探针：**产物只落计数与 sha256 前 8 位指纹，明文票只能打终端（`--show-tokens N`）**，
+  并在自测里加一条"产物零明文"断言。
+
+## 工具坑（写卡时）
+
+- `patch` 的 old_string 若**以缩进行开头**（YAML 续行 / 代码块），替换后**整块会多 1 个前导空格**——
+  补丁后必须复校异常缩进（找 `^ ## ` / `^ # `），发现即按行 dedent 修正。
+
+## 落卡位置与批量替换纪律（实测）
+
+- `skill_manage create` **不带 `category` 会把卡建到 `skills/<卡名>/`（库根）**，不是 `skills/security/`；建 security 卡必须 `category="security"`。误落位后 `mv` + `rmdir` 清幽灵目录，再 `find . -maxdepth 2 -type d -name "<卡>*"` 复查。
+- `create` 的 `description` 硬限 **60 字符**（超限直接 `Description is N (M chars)` 拒），且前 57 字要自带触发条件。批量落子代理草稿时，草稿 description 普遍 140–260 字→必须逐卡改写后再落。
+- **批量文本替换是最危险的收尾动作**：`glob("*/SKILL.md")` 全局 replace 会误伤既有卡（实测误改了 3 张卡里指向工作产物的 `REPORT.md`）。铁律：只对**白名单目录**操作 → 替换后 `grep -l <新串> */SKILL.md` 复核命中集 → 发现越界立即回滚（反向 replace）并复查计数为 0。
+- 子代理大批量产出的标准落卡流程：`mkdir -p <卡>/references` → `cp 草稿 SKILL.md` → `cp references/*` → 改写 description → 补 `references/provenance-and-unverified.md` 引用行 → 悬空引用检查。**别用 write_file 重打长正文**（会撞截断），一律 `cp` 已验收的字节。
+- 草稿里的「参考文件」若指向子代理自己的 `REPORT.md`，落卡时改名为 `references/provenance-and-unverified.md`；改的是**新卡白名单内**的文件，不要全局替换。

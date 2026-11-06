@@ -1,0 +1,233 @@
+---
+name: android-client-security-checklist
+description: "Android 客户端安全评估12类清单: drozer/组件导出/手势密码/截屏。"
+---
+
+# Android 客户端安全评估清单（12 大类 · 检查项 × PoC × 判据 × 定级）
+
+甲方验收式的**客户端安全评估骨架**：拿到 APK 不用想"从哪查起"，沿 12 类逐项过，每项都有 PoC、判据、风险等级，产物是一份可交付评估报告。深度利用落到对应专卡。
+
+## When to Use
+
+- 授权目标有 Android App，要做客户端安全评估 / 上线前安全检测 / 甲方验收清单
+- 已逆向完但缺"覆盖度"：怀疑漏项、要被问"组件/手势/截屏/更新查了吗"
+- 触发词：客户端安全评估、Android 安全检查清单、drozer、组件导出、allowBackup、debuggable、Intent DoS、手势密码、FLAG_SECURE、键盘劫持、完整性校验、更新劫持、虫洞 WormHole、私有目录权限
+
+## 分工（本卡只做骨架与判据）
+
+| 卡 | 管什么 |
+|---|---|
+| `apk-recon` | 情报提取：密钥/后台/测试域/签名算法 |
+| `apk-reverse` | 解包/查壳/框架识别/从 JS 提业务 API |
+| `mobile-app-pentest` | 套壳 App → 后端 API → 管理后台 |
+| `webview-deeplink-bridge` | WebView/Deeplink/JsBridge/NanoHTTPD 桥面深挖 |
+| `android-app-runtime-analysis` | 模拟器驱动/输入注入/frida 挂载/取数 |
+| `mobile-app-security-testing` | MASVS 全栈深度（逆向/免杀/云链） |
+| **本卡** | **12 类逐项清单 + PoC + 判据 + 风险定级 → 可交付报告** |
+
+## 0. 全景 5 分钟（先把后续所有入口一次性列全）
+
+```bash
+docker run -it --rm -p 8000:8000 opensecurity/mobile-security-framework-mobsf:latest   # 静态全景
+python3 tools/ops/apk_recon.py extract --apk app.apk --case 站点_日期                  # 本库探针
+adb install -r -g app.apk
+adb shell run-as <pkg> id          # 成功 ⇒ android:debuggable="true"（最直接判据）
+drozer console connect -c "run app.package.attacksurface <pkg>"   # 导出组件+可调试+可备份
+bash scripts/android_client_audit.sh <pkg>                        # 本卡一键 12 类粗筛
+```
+`attacksurface` 输出的三个数（exported activities/services/receivers/providers + debuggable + backup）是本卡 1~3 类的总入口。
+
+## 1. 客户端程序保护
+
+| 检查项 | PoC | 判据 / 风险 |
+|---|---|---|
+| 签名来源 | `jarsigner -verify -verbose -certs app.apk` | debug 证书/第三方（非直接客户）证书 = 风险 |
+| 反编译难度 | `apktool d` → `dex2jar` + jadx | 直接还原可读 Java 且无混淆 = 不安全 |
+| **完整性自校验** | apktool 改 `res/`/`assets/`（改 logo 最易确认）→ 重打包 → signapk 签名 → 安装 | 改了还能跑 = **高风险**（可植入木马） |
+| debuggable | `adb shell run-as <pkg> id`；manifest 里 `android:debuggable` | true = 可 jdb/jdwp 挂调试、篡改业务逻辑 |
+| allowBackup | manifest `android:allowBackup` 未显式 false | true = `adb backup` 可拉走明文敏感数据 |
+| 权限过宽 | `python manitree.py -f AndroidManifest.xml` 或人工比对业务 | 申请权限 > 业务需要 = 隐患 |
+
+重打包必带签名（debug/自签/过期都可，**不可不签**）；签名不同不能覆盖安装，先卸载。
+
+## 2. 组件安全（导出判定矩阵）
+
+**判定规则（先说清，否则结论站不住）**：显式 `exported="true"` → 可导出；显式 false → 不可；未声明时：非 Provider 有 `<intent-filter>` 则可导出、无则不可；**Provider 在 SDK≤16 默认 true，>16 默认 false**（唯一致命的不对称点）。`android:protectionLevel` = signature/signatureOrSystem 时只有同签名 APK 能拿到。
+
+| 组件 | 检查 | 利用 |
+|---|---|---|
+| Activity | `run app.activity.info -a <pkg>` | `am start -n <pkg>/.Xxx` 免登录直达内页 → 越权/信息泄露 |
+| Service | `run app.service.info -a <pkg>`；读 `onCreate/onStartCommand/onHandleIntent` | `run app.service.start`；检索 `startService/bindService` 传参是否泄露 |
+| Receiver | `run app.broadcast.info -a <pkg> -i`；grep `registerReceiver()` 找动态注册 | `am broadcast -a <ACT> -n <pkg>/.R` 发空值/畸形值 → 崩溃或改状态 |
+| Provider | `run app.provider.info -a <pkg>` | `scanner.provider.injection`（SQLi）/`.traversal`（目录遍历）/`.finduris`；`content query --uri`；`app.provider.read content://.../system/etc/hosts/` |
+| 组件通信全景 | drozer 命令集见 `references/02-components-and-intent.md` | 代码侧 grep `addURI` 定位真实 URI |
+
+**Intent 本地 DoS 四族**（`getXxxExtra` 无异常捕获 → 任意应用可打崩）：空值/`getAction()` NPE、`ClassNotFoundException`（传自定义 `Serializable`）、`IndexOutOfBoundsException`（空 `IntegerArrayList` 配 `USER_NUM` 循环）、类型错配。攻击 APK 源码模板见 `references/02-components-and-intent.md`。
+`adb shell am start -n <pkg>/.MainActivity` / `am broadcast -a X -n <pkg>/.R` 即可验证，崩溃即成立。
+
+## 3. WebView 三查
+
+| 检查项 | 代码判据 | 风险 |
+|---|---|---|
+| 远程代码执行 | `addJavascriptInterface(new JSInvokeClass(),"js2java")` + `setJavaScriptEnabled(true)`；且 `targetSdkVersion<19` / `minSdk` 未限制（CVE-2012-6636，2.1~4.3.1） | 高：JS 反射调用任意 Java 类 → RCE |
+| 不校验证书 | grep `onReceivedSslError`，看是否调 `handler.proceed()` | 高：中间人可解密 |
+| 密码明文留存 | grep `setSavePassword`，未显式 false → `databases/webview.db` 明文存表单密码 | 高（设备被 root 即泄） |
+
+drozer：`run scanner.misc.checkjavascriptbridge -a <pkg>`。验证页：应用内打开 `http://security.tencent.com/lucky/check_tools.html` / `http://drops.wooyun.org/webview.html`。桥面深挖 → `webview-deeplink-bridge`。
+
+## 4. 敏感信息存储六查
+
+```
+/data/data/<pkg>/           私有目录（测试前先完全退出 App，有些会清临时文件）
+```
+
+1. **文件权限**：正常末三位为空（`rw-rw----`），目录多一个 x（`rwxrwx--x`）；`MODE_WORLD_READABLE/WRITEABLE` 创建的文件会多出权限位。`ls -l` 逐层看。
+2. **SharedPreferences**：`shared_prefs/*.xml` 是否含密码/token/手机号明文。
+3. **SQLite**：`*.db`；用 WebView 的必有 `databases/webview.db`、`webviewCache.db`（记 cookie 与提交表单）。`sqlite3 x.db '.tables'`。
+4. **APK 包内硬编码**：反编译 + `strings` + 16 进制编辑器查密钥/测试域/后台路径。
+5. **缓存与外部存储**：`/sdcard/<AppName>/` 遍历；`strace -e trace=file` 抓 open/read/write 反推真实落盘路径。
+6. **加密是否真加密**：`base64` = 不安全；硬编码密钥的加密 = 不安全；算法安全见第 11 类。
+
+提取：`adb pull /data/data/<pkg>/...`（先 root 或 `run-as`）。
+
+## 5. 输入侧信道（密码软键盘）
+
+| 检查项 | PoC | 判据 |
+|---|---|---|
+| 键盘劫持 | 装 `ns_keylogger.apk` 类 IME → 设置里默认输入法切到它 → 输入框长按空格选它 → `logcat` 看击键 | 用**系统输入法**的框可被完整记录 = 高 |
+| 随机布局 | 肉眼 + 反编译看键位是否随机化 | 不随机=中；**只在页面载入时随机一次**（非每次点输入框重随机）也算低/中 → 同样可预测 |
+| 屏幕录像（视觉回显） | `adb shell /system/bin/screencap -p /mnt/sdcard/1a.png` 连续截图；或 fbtool | 输入时有视觉回显 → 连拍即还原密码；无防截屏则**即使随机+无回显也会被截** |
+| FLAG_SECURE 防截屏 | grep 密码窗加载处是否 `FLAG_SECURE` | 未开 = 高；注意兼容性（实测同版本不同机型：N/中兴可截，ASUS TF300T 被阻止） |
+| 底层击键（root） | `getevent -p` 找键盘 event 文件 → 输密码时 `getevent /dev/input/eventN` | 能从 `/dev/input/eventN` 读到键盘码 = 高；**先确认该 event 文件是否仍输出击键**（新系统多已不输出） |
+
+`sendevent` 可反向模拟输入（`sendevent /dev/input/event0 … keycode 2`）；`getevent/sendevent` 需 root。
+
+## 6. 认证与会话策略
+
+| 检查项 | 测试法 | 风险 |
+|---|---|---|
+| 密码复杂度 | 人工试 `123456/654321/121212/888888`；或反编译找口令校验方法 | 无检测中 / 检测不全低 |
+| 同账号多设备登录 | 两设备同账号同时登录操作 | 允许 = 高 |
+| 账户锁定 | 连错 N 次看是否锁定 | 无锁定 = 高（配合弱口即爆破） |
+| 私密问题 | 改单次支付限额等敏感信息是否要私密问题；问题-答案是否一一对应 | 中 |
+| 会话超时 | 挂起 20 分钟后操作是否要求重登 | 不超时 = 高 |
+| 界面切换保护 | 登录/转账页填好账号密码 → 切出 → 切回，看是否清空；登录后切出 5 分钟内是否自动退出 | 不清空中 / 不退出高 |
+| UI 信息泄露 | 错误用户名 vs 正确用户名+错密码的提示是否不同（**用户名枚举**）；卡号/身份证/手机号是否遮挡 | 中 |
+| 验证码 | 组成是否简单 → `PKAVHttpFuzzer` / ddddocr 识别；**关键**：验证码校验接口是否可枚举暴破（如 `CRrand.jsp?rand=0000~9999`，发 1 万次请求比对回显，见 references） | 可暴破 + 无限次 = 高 |
+| 安全退出 | 客户端登出后，用旧 session token/JSESSIONID 继续访问需登录页 | 服务端未销毁会话 = 高 |
+| 密码修改验证 | 改密时故意填**错误旧密码** | 服务端不校验旧密码 = 高 |
+| Activity 界面劫持 | 装 `HijackActivity.apk`，指定目标进程，看能否用自身窗口覆盖被测界面 | 覆盖成功且无警告 = 中 |
+
+## 7. 手势密码专章
+
+| 检查项 | 测试法 | 判据 |
+|---|---|---|
+| 复杂度 | 设置时点数过少是否有提示/限制（提示文案可快速定位代码） | 无最少点位判断 = 中 |
+| 修改/取消 | 改/取消手势时是否要求**原手势或普通密码**；走"忘记手势"流程、或业务跳转回到手势设置页后能否直接改删 | 可免旧手势改删 = 高 |
+| 本地保存 | `/data/data/<pkg>/` 下 grep `gesture`/`key`；看明文还是散列 | 明文=高；**直接 MD5/SHA1 单次散列**也按不安全算（碰撞 + `somd5.com` 查表；位数对照：MD5=128bit/32hex、SHA1=160bit/40hex 可反推算法） |
+| 锁定策略 | 连续错 N 次是否退出登录/锁客户端 | 无锁定 = 高：手势空间仅 `9! = 362880`，可离线/在线穷举 |
+| **抗绕过** | 装 Xposed + `SwipeBack` 插件 → 进手势页 → **侧滑关闭手势页**，看是否直接进入登录后页面 | 能滑走 = 高（UI 层锁，非业务层鉴权） |
+
+存储形态：通常 3×3 二维数组 `a[2][2]` 本地保存，与服务器交互时转一维 `b[8]`（手机数字键盘序）再处理。
+
+## 8. 进程与内存保护
+
+| 检查项 | PoC | 判据 |
+|---|---|---|
+| 内存敏感数据 | `MemSpector`/CheatEngine 搜索明文（需 root）；用户名密码常在 `/dev/ashmem/dalvik-heap` 段 | 能搜到明文密码 = 高。工具多走 **ptrace**，可用 ptrace 自保护对抗 |
+| 动态注入 | 检查 `LD_PRELOAD` 是否可劫持（预加载任意 so 劫持如 `__libc_init`）；或用 ddi / hook 框架 | 可注入 = 高 |
+| 本地端口暴露 | `busybox netstat -tuanp \| grep -Ei 'listen\|udp'` | 暴露 PF_INET socket 且无调用者身份/id/permission 校验 → **可越过沙箱以该应用权限执行命令**（历史多次 DS/提权/RCE） |
+| 外部动态加载 DEX | grep `DexClassLoader(`；核对 `dexPath` 是否落在其他应用可读写目录（Android 4.1 前 `/sdcard` 允许） | 无完整性校验 + 外部可写 = 可被替换注入 |
+| so 导出接口 | 其他 App 尝试调用其 so 函数 | 可被任意应用调用 = 风险 |
+
+## 9. 通信安全
+
+**抓包三条路径**（选错会白折腾一整天）：
+1. 走系统代理的 HTTP(S)：模拟器 APN 代理 / 真机同 WiFi 设代理 / `emulator -avd X -http-proxy 127.0.0.1:8080`（Burp 需勾 `Support invisible proxying`）。
+2. **不接受系统代理**：root 设备装 `ProxyDroid`（iptables 透明代理）；不能 root 就把安卓虚拟机跑在 Windows 虚拟机里再挂 Proxifier。
+3. **非 HTTP 私有协议**：`tcpdump` 抓 pcap + Wireshark 分析；协议简单自行仿制，复杂则摘客户端代码/自实现。实时：`adb shell "tcpdump -s 0 -w - | nc -l -p 4444"` + `adb forward tcp:4444 tcp:4444` + `nc localhost 4444 | wireshark -k -S -i -`。
+
+**非标准端口 HTTP 的透明代理**（ProxyDroid 只吃 80/443/5228）：
+```bash
+# http → 8123, https → 8124；内核不支持 -j REDIRECT 时换 DNAT
+adb shell su -c 'iptables -t nat -A OUTPUT -p tcp --dport <SERVER_PORT> -m tcp -j REDIRECT --to-ports 8123'
+adb shell su -c 'iptables -t nat -A OUTPUT -p tcp --dport <SERVER_PORT> -j DNAT --to-destination 127.0.0.1:8123'
+# 每个端口各来一条；模拟器默认无 iptables（需重编内核）
+```
+
+| 检查项 | 测试法 | 风险 |
+|---|---|---|
+| 通信加密 | 改 URL `https→http` 看是否报连接错误；tcpdump 看是否真 TLS | 未 HTTPS 且无加密 = 高 |
+| 证书有效性 | 代理替换证书是否报错（能代理 = 没校验证书）；DNS 改指 `https://mail.qq.com/` 看是否提示域名不符；代码 grep `setDefaultHostnameVerifier`，`verify()` 恒 true = 无校验 | 高 |
+| 证书固定 | 替换证书即断网 ⇒ 预存了公钥/Hash/整证书。客户端无完整性校验时可改其内置证书为代理证书；或用 Android SSL Trust Killer / Android-ssl-bypass | 绕过 pinning |
+| SSL 版本/套件 | `openssl s_client -connect host:443` | < TLS1.0 或 RC4/DES = 不安全 |
+| 关键字段加密 | 代理看密码/收款人是否明文 | 明文 = 高 |
+| 完整性校验 | 代理改提交参数重放，看是否报错；或反编译找 MD5/SHA 校验函数并定位其参数 | 无签名可任意重放/篡改 = 高 |
+| **客户端更新劫持** | 代理抓更新包，把服务器返回的更新 URL 改成恶意链接 → 看是否直接打开下载安装 | 可劫持 = 高（供应链，可静默植入） |
+| 短信重放 | 重放短信验证码请求包 | 可轰炸 = 中 |
+| 访问控制 | PC 浏览器直接访问客户端 URL；绕过登录直达需登录页；绕过二次验证 | 中 |
+
+只能靠"改客户端/改设备"才能解除的保密性/完整性措施，**不算作风险**。
+
+## 10. 第三方 SDK 与自带服务
+
+- **WormHole 虫洞（百度 SDK）**：grep `40310`/`6259`/`http://127.0.0.1:40310` → `netstat` 看端口 → `adb forward tcp:40310 tcp:40310` 后请求
+  `http://127.0.0.1:40310/getcuid?secret=0&mcmdf=inapp_&callback=test_deviceid_callback`、`.../getapplist?secret=0&mcmdf=inapp_baidu_bdgjs&...`、`http://127.0.0.1:7777/getcuid?...`。**返回数据即漏洞成立**（远程可借本地端口读设备信息/装包）。
+- **二维码识别**：扫畸形二维码图（`http://static.wooyun.org//drops/20151201/201512011130233308817.jpg`）→ monitor 看崩溃日志，崩 = 风险。
+- **开放网络服务**：grep `new ServerSocket(SERVER_PORT)` + `readCMDFromSocket` → 若收到 `exec` 等指令**无任何调用者校验即执行** = 高风险（沙箱逃逸级）。
+- **运行其它可执行程序**：grep `Runtime.getRuntime().exec` / `.load(` / `.loadLibrary(` → 调用逻辑有缺陷可执行恶意第三方程序 = 风险。
+
+## 11. 弱加密审查（反编译后 grep）
+
+```java
+new SecretKeySpec(rawKeyData, "DES"); Cipher.getInstance("DES/ECB/PKCS5Padding");   // 弱算法
+Cipher.getInstance("RSA/NONE/NoPadding");                                          // 无 padding
+byte[] iv = {0x00,...,0x00};  new IvParameterSpec(iv);                            // 硬编码/固定 IV
+Cipher.getInstance("AES/ECB/PKCS7Padding", "BC");                                  // ECB 模式
+keyGen.initialize(512);                                                            // RSA 密钥过短
+```
+判据补充：base64 不是加密；硬编码密钥 = 不安全；固定/全零 IV 使同明文同密文。
+
+## 12. 风险定级表（交付必备）
+
+完整表（含 30+ 项的高/中/低口径）见 `references/06-risk-grading.md`。速记：**高** = 可获密码等敏感信息或篡改数据/未 HTTPS 无加密/证书不校验/无完整性自校验/明文存储/能截屏或能记键盘/无锁定策略/更新可劫持/会话不销毁；**中** = 仅不当导出但拿不到敏感信息、无复杂度检测、界面切换不清空、UI 泄露、验证码、短信重放、私密问题；**低** = 客户端保护不足、检测不全面。
+
+## 老方案 → 现代等价（报告里多数工具 2019 后已死，判据不变）
+
+| 报告里的做法 | 现在怎么做 |
+|---|---|
+| dex2jar + jd-gui | jadx 1.5+（直接出 Java）；grep 仍最快 |
+| ZjDroid（Xposed 内存 dump dex） | frida-dexdump / objection / FRIDA-DEXDump |
+| APKAnalyser / AndBug | jadx-gui + frida（`frida -H host:port -f pkg`） |
+| MemSpector | frida `Memory.scan` / GameGuardian |
+| Xposed | LSPosed（Magisk） |
+| Portecle 改 `cacerts.bks` | Magisk 模块 AlwaysTrustUserCerts，或 system-less 装用户证书进系统信任区 |
+| `adb shell screencap` 连拍 | 同上 + `FLAG_SECURE` 判据照样 |
+| Androguard / mercury | MobSF（`apk_recon.py` 已封装常用面） |
+
+## Pitfalls
+
+- **组件导出 ≠ 漏洞**：只写清所有导出组件，由开发侧确认"是否确实需要导出"；能不能构成危害必须读代码（动态注册的组件静态工具**查不到**，只能读代码）。
+- `run-as` 在包名不足 3 层时报 `Package is unknown`（工具 bug，不是没权限）。
+- Provider 的 exported 默认值随 SDK 版本翻转（≤16 true / >16 false）——同一 APK 在旧机新机上结论相反，写报告要标 SDK。
+- 测试私有目录前**先完全退出客户端**，否则会漏掉退出时被清掉的临时文件。
+- FLAG_SECURE 与硬件相关，同版本不同机型结果不同，别把单机结果当全局结论。
+- 很多厂商机删了 busybox/tcpdump/netstat，命令不存在不等于不存在风险——换模拟器复测。
+- 抓不到包先分三路（系统代理 / 不接受代理 / 非 HTTP），不要死磕 Burp。
+- `somd5` 类查表只对**单次散列**有效；加盐/多次迭代要真暴破。
+
+## 参考
+
+- `references/01-client-hardening.md` 签名/反编译/完整性/allowBackup/权限 + 弱加密代码样例
+- `references/02-components-and-intent.md` drozer 全命令图谱 + Intent DoS 四族攻击 APK 源码
+- `references/03-storage-and-input.md` 存储六查命令 + 键盘/截屏/getevent 实测细节
+- `references/04-auth-session-gesture.md` 会话策略 + 验证码暴破脚本 + 手势密码全流程
+- `references/05-process-and-network.md` 内存/注入/本地端口/抓包矩阵/pinning/更新劫持/虫洞
+- `references/06-risk-grading.md` 风险定级全表 + 报告模板
+- `scripts/android_client_audit.sh` adb 一键 12 类粗筛（真机/模拟器直跑；--static 模式无设备也能跑）
+
+## 来源
+
+本卡由《Android APP渗透测试方法大全》（137 页）系统提炼，叠加本库既有 Android 卡的实战积累。
+原报告配套工具多为 2015~2019 年代产物（dex2jar / ZjDroid / Xposed / APKAnalyser / Portecle），正文「老方案 → 现代等价」表给出替代；**判据与风险定级口径按原文保留**（人行/金融客户端安全评估口径）。
+换评估对象时只替换命令里的包名/路径，12 类骨架与定级表直接用。

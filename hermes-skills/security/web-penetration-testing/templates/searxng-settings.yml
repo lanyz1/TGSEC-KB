@@ -1,0 +1,19 @@
+# SearXNG settings.yml template for pentAGI integration
+# Disables CSRF protection on JSON API for automated search tool access
+# Copy to container: docker exec -i searxng sh -c "cat > /etc/searxng/settings.yml" < searxng-settings.yml
+
+use_default_settings: true
+
+server:
+  secret_key: "replace-with-your-secret"  # Generate with: openssl rand -hex 32
+  image_proxy: true
+  # Disable rate limiter and CSRF for local JSON API access
+  limiter: false
+
+search:
+  formats:
+    - html
+    - json
+
+ui:
+  static_use_hash: true

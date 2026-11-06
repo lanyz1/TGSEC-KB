@@ -1,0 +1,23 @@
+# 支付受限页优化(2026-08-13,用户系列偏好)
+
+页面:`app/checkout/payment-restricted/page.tsx`(买家收银台 + 卖家充值的非 USDT 通道跳转共用)。
+
+## 用户偏好(铁律)
+
+1. **不要"待接/演示/风控"类不正规提示**。卖家充值选非 USDT 通道时的灰色提示条
+   「[待接] 该支付通道正在接入中,提交后将跳转到统一支付受限说明页…当前仅 USDT 通道真实可用」→ 用户原话"把这个提示删掉,显得太不正规了"——已删(非 USDT 通道只剩金额输入 + "前往 X 支付"按钮,点击跳受限页自带原因)。
+   教训:页面内不放"这块还没接/演示占位"文案,受限原因统一由跳转后的说明页承担。
+2. **不要套双层白背景**。原布局 `wholesale-checkout-page`(1120px 白条,背景 #fff)+ 内部 `payment-restricted-card`(白卡)两层白叠一起,卡片靠淡边框才看得出。用户原话"不要套两个白色背景,一个就够了"。
+   修复:section 加 `payment-restricted-page` 类,`.buyer-portal .payment-restricted-page { background: transparent; }` 透出 body 浅灰(#f7f8fa / #f5f6f8),只剩卡片一层白 + 阴影浮起。
+3. **文案去风控威胁措辞**。原「该通道当前触发平台风控策略,为保障您的资金安全已被临时限制…」→ 中性简洁:
+   - 顶部标签:支付风控提示 → **支付方式不可用**
+   - 标题:暂时无法完成支付 → **暂无可支付方式**
+   - 描述:触发风控/临时限制/资金安全 → **该通道当前暂不可用,请切换其他支付方式完成订单。**
+   - 删除风控编号 RC-PAY-CHANNEL;提示"您的订单信息已保留,切换支付方式后可直接继续结算";"推荐使用 USDT(TRC20)"
+   - 6 语言同步(payr.* 键,锚点替换 + grep -c =6)
+
+## 相关键位
+
+- 文案键:`payr.eyebrow / payr.titleSuffix / payr.desc / payr.tip1-3 / payr.foot / payr.defaultMethod`(lib/translations.ts × 6 语言区)
+- `back` 参数只允许站内相对路径(防外部注入),默认 /checkout
+- 多币种展示防改写:`data-currency-lock` 标注 USDT(TRC20)支付通道名

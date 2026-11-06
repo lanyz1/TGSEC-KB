@@ -1,0 +1,77 @@
+# CDN 溯源方法学与源站定位
+
+> 目标套 CDN 时的核心能力：**分层组合拳找源站真实 IP**（单方法成功率有限，组合拳 95%+）。配合 `waf产品矩阵.md`（找到源站后直连绕 WAF）。
+
+## 0. 四层流水线（先分层，不打乱）
+
+```
+第一层 发现   证书透明度 → 子域枚举(含 altdns) → 历史 DNS 聚合 → 被动 DNS 多源交叉
+第二层 暴露   网络空间引擎(Shodan/FOFA/Censys/ZoomEye) → CSP/CORS/JS 端点 → 云存储桶枚举
+第三层 触发   邮件头/Pingback → 缓存投毒/请求走私 → SaaS/Serverless 源站发现
+第四层 验证   Host 头验证 → JA3/JA4 TLS 指纹 → HTTP/2 指纹 → 页面哈希一致性
+```
+
+**关键**：Host 头返回 200 ≠ 源站（可能是 CDN 节点/共享主机）。必须用 TLS/HTTP2 指纹 + 页面哈希**交叉验证**，否则误报。
+
+## 一、高成功率方法（优先）
+
+| # | 方法 | 成功率 | 关键工具 |
+|---|------|--------|---------|
+| 1 | 证书透明度日志 | 85% | crt.sh / Censys / CertSpotter |
+| 2 | 被动 DNS 数据聚合 | 80% | 多源聚合（SecurityTrails 等） |
+| 3 | 子域枚举 | 80% | Subfinder / Amass / OneForAll |
+| 4 | 历史 DNS 记录 | 75% | SecurityTrails / VirusTotal / DNSDB |
+| 5 | 网络空间搜索引擎 | 70% | Shodan / FOFA / ZoomEye / Censys |
+| 6 | CNAME 解析链追踪 | 70% | dig +whois |
+| 7 | 多 DNS 解析器交叉 | 60% | dnsx / massdns |
+| 8 | SPF 邮件记录 | 60% | dig TXT |
+| 9 | Host 头验证 | 55% | curl / httpx（配合指纹验证） |
+| 10 | CDN IP 范围反查 | 65% | ASN / cdn_ranges 类 IP 段库 |
+
+## 二、中成功率（补充面）
+
+| # | 方法 | 成功率 | 要点 |
+|---|------|--------|------|
+| 1 | MX 邮件服务器关联 | 55% | 邮件服务器常不在 CDN 后 |
+| 2 | ICP 备案查询 | 45% | beian.miit.gov.cn（国内目标） |
+| 3 | 邮件头分析 | 45% | 收到目标邮件读 Received 头找真实 IP |
+| 4 | 云存储桶枚举 | 50% | lazarus / bucket_finder |
+| 5 | 移动 App / 小程序硬编码 IP | 45% | jadx / apktool 逆向找接口 IP |
+| 6 | 第三方 ID 关联 | 50% | Google Analytics / 百度统计 UA 泄露 |
+| 7 | CSP/CORS 头泄露 | 40% | curl 查 CSP 里的源站域/内网 IP |
+| 8 | Favicon 哈希匹配 | 40% | Shodan/FOFA `icon_hash=`+mmh3 |
+| 9 | XML-RPC Pingback | 40% | pingback 外带到自己服务器读源站头 |
+| 10 | JS/API 端点泄露 | 45% | grep JS 里的接口域/内网地址 |
+| 11 | CDN 回源 IP 段利用 | 55% | 厂商文档公开的源站网段范围扫描 |
+| 12 | 源站 IP 漂移实时追踪 | 50% | 监控 CDN IP 段变化 |
+
+## 三、进阶/组合面
+
+| 面 | 原理 |
+|----|------|
+| Cloudflare Pages/Workers | `*.pages.dev` / worker 路由绕过 CF 主域 |
+| Serverless/Lambda@Edge | 错误页面/日志触发泄露源站 |
+| HTTP/3 (QUIC) | `curl --http3` 可能连到源站 |
+| 容器/K8s Ingress | Shodan 搜 `ssl.cert.subject.cn` 同证书的独立 IP |
+| CI/CD 泄露 | `.git` 泄露、GitHub dork 找部署配置里的真实 IP |
+| DNS Rebinding→SSRF | SSRF + 内网解析翻源站 |
+| WebSocket/SSE 长连接 | `wscat`/`curl -N` 长连接可能直连源 |
+| Anycast 去匿名化 | 多地 ping 对比 RTT 差异分析 |
+| CDN Origin Shield 绕过 | 请求路由操纵打穿盾 |
+| 速率限制差分 | 直连候选 IP 与 CDN 行为差异 |
+
+## 四、验证：别把误报当源站
+
+1. **页面哈希一致性**：候选 IP 的响应页面与 CDN 版本一致（`curl -s | sha256sum`）
+2. **TLS 指纹**：JA3/JA4 与源站特征匹配（EIP：浏览器标准指纹 vs 服务器自定义）
+3. **HTTP/2 指纹**：候选 IP 的 H2 支持与帧序、SETTINGS 帧一致
+4. **Host 头行为**：候选 IP 上不同 Host 返回不同内容（= 真虚拟主机），同内容需谨慎
+5. **证书**：候选 IP 直接返回目标的证书（非 SNI 也出证书 = 高可信）
+6. **回源验证**：直连候选 IP + 正确 Host → 与 CDN 访问内容一致
+
+**满足 2 条交叉验证才写结论**；仅 Host 200 不写。
+
+## 五、纪律
+- 溯源找源站属侦察（Phase 1），本身合法；**直连利用必须回到授权范围**（源站是目标资产的一部分）
+- 扫描候选源站 IP 段控制在授权范围；找到源站后按目标授权资产对待
+- 不动第三方 CDN 厂商的节点，只定位目标自己的源站

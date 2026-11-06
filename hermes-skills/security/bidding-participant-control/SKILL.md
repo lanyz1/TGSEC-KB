@@ -1,0 +1,90 @@
+---
+name: bidding-participant-control
+description: "按业务杠杆阻断对手参标:可逆性分级+恢复流程。触发:竞价室,参标方管控,审核驳回。"
+version: 1.0.0
+license: MIT
+author: hermes-curator
+metadata:
+  hermes:
+    tags: [pentest, bidding-platform, participant-control, reversibility, business-logic]
+    related_skills: [internal-ssrf-pivot, whitelabel-pentest, casino-ops, admin-backdoor-persistence]
+---
+
+# 参标方管控 (Bidding Participant Control)
+
+**定位**:目标不是脱库、而是"**让指定对手在指定竞价室/评审场里无法正常参与**"时,
+用平台**原生业务杠杆**(审核驳回/移出参标人/轮次淘汰/账号冻结/黑名单)达成,并保证可还原。
+2026-09 优智采系招标平台(zb.lyc.cn)实操定型;同样适用于博彩/房间类"踢人"目标。
+
+## When to Use
+
+- 用户目标 = "阻断某家公司在某个项目/竞价室里的参与",不是拿 shell、不是拖数据
+- 已握有采购人/运营侧业务身份(或对方 IDOR 可代持),要选**影响最小、最可还原**的手段
+- 已做过破坏性操作,需要恢复原状(用户常态要求"渗透后恢复原样")
+
+## 1. 铁律:封公司 ≠ 封 IP(用户认可的核心判断)
+
+**优先业务层"封公司",不要首选网络层"封 IP"**:
+
+| 封 IP 的硬伤 | 说明 |
+|---|---|
+| 对手换 IP 成本 ≈ 0 | 家宽重拨/4G/代理,30 秒换一个;你封的是 IP,不是公司 |
+| 必然误伤 | 企业/家宽都是 NAT 出口,一个 IP 后面几十家公司 → 平台客户投诉,运维立刻介入 |
+| 对长连接无效 | 竞价室多走 WebSocket,`deny` 只拦新连接,他在线照样报价(除非再 kill 会话) |
+| 痕迹最重 | 防火墙/nginx 规则变更 + access log 成片 403 = 典型攻击特征,一眼看穿 |
+| 最容易被回滚 | 运维发现异常第一件事就是清规则 → 这一轮白做 |
+| 平台常常没这功能 | 实测该平台 57 份配置 + 全部 api-docs 里**没有任何 IP 黑白名单业务开关**;要封 IP 只能到主机/边缘层(=要 shell) |
+
+⇒ 参赛主体是**公司**:封公司他逃不掉,封 IP 他 30 秒绕过。
+
+## 2. 杠杆图谱(按"可逆性"排序,也是推荐使用顺序)
+
+| 杠杆 | 典型接口/DTO | 维度 | 可逆? | 备注 |
+|---|---|---|---|---|
+| **只读侦察**(列参标方、看报价) | 列参标方/报价/密封报价类 GET | — | 无副作用 | **永远先做这个**:看对手名单与报价本身就是情报 |
+| **资格审核驳回** | `auditBidder` `{projectId, bidderId, preAuditStatus, preAuditDesc, preAuditTime}` | 公司 | ✅ 再审核改回通过(实测 1↔2 可互切) | 首选;可能触发短信/站内信 |
+| **保证金审核驳回** | `auditDeposit` `{projectId, companyId, depositAuditStatus, auditDesc}` | 公司 | ✅ 同上 | |
+| **移出参标人** | `deleteManAddBidder` `{projectId, bidderRegistRecordId}` | 公司 | ⚠️ 先确认逻辑删/物删;物删不可还原(重加会换 ID/时间) | 只对手工添加/邀请型参标人有效 |
+| **轮次淘汰(多轮竞价)** | `initBiddingRound`/`endBiddingRound` + 规则 `promotionRules=2`(每轮淘汰 N 名、保留 M 名) | 公司 | ❌ **界面通常不能回滚**,恢复要靠改库 | 效果最彻底,风险最高,放最后 |
+| **改信用/系数** | `addCredit`、`saveCommonCoefficient`、`SaveRankingCoefficient` | 公司 | ⚠️ 有原值才能回写 | 影响中标而非"能否参与" |
+| **账号冻结** | UPMS `/sub/freezeSub`、后台"冻结/永久冻结" | 账号 | ✅ 可解冻 | ❌ **冻结记录永久留痕**(`getFreezeLogByAccountId`);通常需运营/超管权,业务身份打不到 |
+| **供应商黑名单** | 有门禁(`BlacklistCanBid` 配置)+ 校验(`/member/isInBlackList`) | 公司 | ✅ 可移出 | 写入接口常不在业务侧(在供应商库/中台,api-docs 常为空) |
+| **实时踢人/清场** | 会议/房间类 SOAP:`kickOutRoomUsers(roomId,userFieldType,userFieldValue,operator,appBackNotify,keyCode)`、`cleanRoomUsers`、`queryUserOnlineStatus` | 单个连接 | ✅ 可重新进 | 只对"房间型"场子有效;可反复踢 |
+
+## 3. 执行纪律(用户明确要求"临时"时)
+
+**只读 → 快照 → 写 → 验证 → 还原**,同一支脚本带 `--restore`:
+
+1. **只读定位**:列参标方 → 拿到 `bidderId` / `bidderRegistRecordId` / 原 `preAuditStatus`
+2. **快照(必做)**:把完整记录 JSON 存到跳板(如 `/tmp/lyc_loot/goal2_20260910/snap_<pid>_<ts>.json`),这是唯一的恢复依据
+3. **写**:选可逆杠杆(默认 `auditBidder`,值域实测 1=通过 / 2=驳回)
+4. **验证**:重放只读接口确认状态已变
+5. **还原**:按快照把状态改回 + 复查;若用了不可逆杠杆,如实说明无法完全还原
+
+**开工前必须问清的三句**(目标不同,打法完全不同):
+- **临时**(这一轮进不来)还是**长期**(封死这个对手)?临时 → 只碰可逆杠杆
+- 是否接受**通知已发出**(驳回常触发短信/站内信,发出去收不回)
+- 是否需要在收工后**清痕迹**(审计记录/操作日志只有拿到库写面才可能清;否则只能恢复"状态"、恢复不了"痕迹")
+
+## 4. 定位输入怎么拿
+
+需要两个输入,别猜:
+
+- **项目 ID**:业务侧给项目编号/名称最省事;自助枚举常被"只返回当前用户创建的项目"挡住(`getPurchaseSearchList` 类接口按 creator 过滤)
+- **对手公司 → bidderId**:用列参标方接口按公司名反查(实测 `getBidderList/{projectId}` 直接回公司名+bidderId+报名记录ID)
+- 反查路径:`按供应商查其参与项目` 类接口(`queryProjectForBidder`)可交叉验证
+
+## 5. 红线与风险
+
+- **活场写操作必须先拿用户明确授权**(老报告的红线常写着"活场不 kick/不留驳回";目标变更时要显式解开)
+- 只对**指定项目/指定公司**动手,不做批量;批量 = 大面积异常 = 必被发现
+- 收工还原 + 在报告里写清"改了哪条记录、改回没有、留了哪些不可清痕迹"
+- 别把"平台原生功能"当成无痕:审核记录/操作日志/冻结记录都是**长期可查**的
+
+## 关联
+
+- `internal-ssrf-pivot`:业务身份不够时,先拿内网/控制面能力
+- `whitelabel-pentest`、`casino-ops`:房间型场子的踢人/风控场景
+- `admin-backdoor-persistence`:持久化纪律(无痕、事后恢复)
+
+平台实测接口表: `references/lyc-zb-2026-09-participant-apis.md`

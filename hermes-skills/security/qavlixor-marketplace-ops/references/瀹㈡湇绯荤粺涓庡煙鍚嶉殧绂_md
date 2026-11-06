@@ -1,0 +1,41 @@
+# 客服系统 + 管理端域名隔离(2026-08-13 实测沉淀)
+
+## 客服系统全貌
+- 买家/卖家独立客服页:`/account/support`、`/seller/support`(+ `[id]` 详情);客服工作台 `/agent`(admin 域名下,不套买家外壳)
+- 客服身份:`AdminUser.supportNickname`(角色权限页可编辑,留空=displayName);admin 发消息 `senderName = supportNickname || displayName` → 对方看到"客服-昵称"
+- 纯客服账号:`AdminUser.isAgentOnly` — 登录 entry=/agent、/admin 全 404 重定向 /agent、requireRole 强制 granted=[]、角色权限页"仅客服账号"开关
+- 新增客服:root 专属"＋新增客服"按钮(角色权限页右上角)+ `POST /api/admin/staffs`(仅 root;校验邮箱格式/唯一/密码≥8/名字非空;默认 isAgentOnly=true)
+- 客服退出聊天 = **真正登出**(`POST /api/auth/logout` 清 cookie → /admin/login)。原跳 /admin 会被纯客服守卫弹回 /agent,永远退不出
+
+## 头像三层体系(聊天会话 peerAvatar)
+- 客服会话(seller_support/buyer_support):固定 `/support-avatar.svg`(蓝底白 Q 标)
+- 普通用户/店铺无头像:`/user-avatar.svg`(灰底深灰 Q 标)——**不许用彩色首字块、不许套客服蓝**
+- 有头像:真实 CDN 头像
+- 落点:message-repository 的 mapConversation / getChatConversationList / getCommerceConversation 卖家视角覆盖,三处都要按会话类型分流
+
+## 域名隔离坑链(admin.qavlixor.com,全部实测)
+1. **Cloudflare 回源导致 `request.url` 的 host = localhost:3003**(nginx 透传正常也白搭)→ `new URL("/admin", request.url)` 会拼出 `https://localhost:3003/admin`。**重定向必须用固定域名**:`const origin = isLocal ? http://${host} : "https://admin.qavlixor.com"`。
+2. **Next `NextResponse.cookies.set` 同名覆盖(Map 语义)**:同 key set 两次只留最后一条。登录 cookie 在 CF 回源下是 **host-only(无 Domain)**,而清 cookie 若只发带 `Domain=.qavlixor.com` 的一条则**清不掉 host-only cookie** → 会话残留退不出。**必须 `res.headers.append("Set-Cookie", ...)` 双条**(host-only + Domain 各一),middleware 守卫清 cookie 同理。
+3. **middleware matcher 漏根路径**:`/admin/:path*` 不匹配 `/admin` 本身;`/login`、`/account` 等买家路径也要进 matcher,否则域名隔离不生效。matcher 需显式列 `/admin`、`/login`、`/register`、`/products` 等。
+4. **守卫死循环(ERR_TOO_MANY_REDIRECTS)**:会话角色守卫(非 admin 会话访问 /admin → 清 cookie 跳登录)必须**排除开放页**(`/admin/login`、`/admin/notifications`、`/seller/login`、`/seller/register`、onboarding),否则买家 cookie 访问登录页也被重定向 → 死循环。
+5. **会话角色守卫必要性**:旧买家 cookie(domain .qavlixor.com 共享)访问管理端 → AdminLayout 权限 null → 管理端全 404("哪个都进不去")。守卫:非 admin 会话访问 /admin → 清 cookie + 跳 /admin/login。
+6. **/agent 守卫禁止用邮箱后缀判断**(`email.endsWith("@globalmart.test")`):root/种子账号能进,但自定义邮箱客服(如 <EMAIL-REDACTED>)被踢 → 跳 /login(买家路径)→ middleware 拦 → 死循环。**改为查 AdminUser 表**(在职员工即可进),跳转目标用 `/admin/login?next=...`。
+7. 子域名根路径/买家路径一律重定向:admin 域名下非 /admin、/agent、/api、/_next 的路径 → `redirect /admin`;seller 域名同理。
+
+## 翻译键插入规则(python 脚本,两次踩坑)
+- **值数组顺序必须 = 文件语言区序**(es,fr,pt,ru,zh,en),否则 es 区插进英文值 → 全错位。锚点值必须全局唯一(fr/en 同值"Support"会把英文块插进 fr 区)。
+- **每行末尾必须带逗号**(`json.dumps(...) + ",\n"`),否则 TS1005。
+- 同锚点被插两遍会重复(zh 区先命中一次再命中一次)→ 插入前记录所有锚点位置,`从后往前`插(避免偏移),或插后 `tr.count('"键名"')` 必须 = 6 并抽查各语言值。
+- **count=6 通过 ≠ 值正确(2026-08-13 实战教训)**:用 `finditer` 按文档匹配顺序替换时,值数组必须**按文件文档区序组织**(= es,fr,pt,ru,zh,en;证据:admin.storageTest.localStorage 键在 637/2781/4925/7070/9838/12940 行)。若按 [zh,en,es,fr,pt,ru] 组织值数组配 finditer 顺序,6 区全部错位且 count=6 仍通过(实测:en 界面显示俄语)。**替换/插入后必须逐语言抽查实际值**,不只数次数;抽查法:无头设 `localStorage.setItem('globalmart-language','zh'/'en')` + reload,或直接读 translations.ts 各区键值比对。
+- 新增 UI 文案必须 键+data-i18n+6 语言一步到位;动态文案(成功提示等)用 `getTranslation` 而非 API 中文 message(API 中文消息会被 LanguageSync 半机翻成"已Update…")。
+
+## 管理端 UI 对齐卖家端(Apple 纯白极简)
+- 卖家端规格(seller-proto.css `.sap`):侧栏 236px `#F9F9F9`、顶栏 52px 白底、内容 padding `30px 32px 44px`、卡片 r-lg 16px 圆角 + `box-shadow: 0 1px 2px rgba(29,29,31,.03)`、h1 `28px/700`、按钮 999px 胶囊 + 主按钮黑底、导航灰字 hover/active 黑、accent 黑。
+- 管理端外壳 = `.admin-portal.admin-shell`(与卖家端 `.seller-portal.admin-shell` 共用组件/CSS 基座),**覆盖规则一律用 `.admin-portal` 前缀**,否则会串到卖家端。
+- **CSS 覆盖要加 `!important` 防多 chunk 加载顺序覆盖**(实测 (0,2,0) 特异性规则被 (0,1,0) 旧规则压过,加 !important 才生效)。
+- 管理端身份卡(console-profile-card)默认深色渐变+蓝光头像 → 覆盖为白底浅灰边+中性浅头像(卖家 nav-identity 风)。
+
+## 无头验证技巧(puppeteer-core + 系统 Chrome)
+- React 受控输入必须用 native setter:`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, v)` + dispatchEvent input,直接 `el.value = v` 不触发 React 更新。
+- 点击按钮触发导航后,`page.evaluate` 里的循环轮询会被 context destroyed 打断 → 用 `page.waitForNavigation` + 后续单独 evaluate。
+- 登录验证:先 `fetch /api/auth/login` 拿 cookie,再 `page.goto` 目标页,比走表单稳。

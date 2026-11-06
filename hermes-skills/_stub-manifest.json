@@ -1,0 +1,728 @@
+[
+ {
+  "card": "0day-exploit-library",
+  "path": "/root/.hermes/skills/security/0day-exploit-library/references/lab-validated-exploits.md",
+  "fallback": "`references/full.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "0day-exploit-library",
+  "path": "/root/.hermes/skills/security/0day-exploit-library/references/target-to-cve-matching.md",
+  "fallback": "`references/full.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "0day-exploit-library",
+  "path": "/root/.hermes/skills/security/0day-exploit-library/references/telegram-poc-feed.md",
+  "fallback": "`references/full.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "0day-exploit-library",
+  "path": "/root/.hermes/skills/security/0day-exploit-library/references/toolchain-and-orchestration.md",
+  "fallback": "`references/full.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "0day-exploit-library",
+  "path": "/root/.hermes/skills/security/0day-exploit-library/scripts/autorecon.py",
+  "fallback": "`references/full.md`",
+  "ext": ".py"
+ },
+ {
+  "card": "0day-exploit-library",
+  "path": "/root/.hermes/skills/security/0day-exploit-library/scripts/cve-2026-27944-nginxui.py",
+  "fallback": "`references/full.md`",
+  "ext": ".py"
+ },
+ {
+  "card": "0day-exploit-library",
+  "path": "/root/.hermes/skills/security/0day-exploit-library/scripts/cve-2026-88008-traefik-h2c.py",
+  "fallback": "`references/full.md`",
+  "ext": ".py"
+ },
+ {
+  "card": "0day-exploit-library",
+  "path": "/root/.hermes/skills/security/0day-exploit-library/scripts/mcp_pwn2.py",
+  "fallback": "`references/full.md`",
+  "ext": ".py"
+ },
+ {
+  "card": "0day-exploit-library",
+  "path": "/root/.hermes/skills/security/0day-exploit-library/scripts/recon_match.py",
+  "fallback": "`references/full.md`",
+  "ext": ".py"
+ },
+ {
+  "card": "0day-exploit-library",
+  "path": "/root/.hermes/skills/security/0day-exploit-library/scripts/tg_channel.py",
+  "fallback": "`references/full.md`",
+  "ext": ".py"
+ },
+ {
+  "card": "1day-nuclei-kit",
+  "path": "/root/.hermes/skills/security/1day-nuclei-kit/scripts/install-arsenal-macos.sh",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".sh"
+ },
+ {
+  "card": "1day-nuclei-kit",
+  "path": "/root/.hermes/skills/security/1day-nuclei-kit/scripts/rop_chain.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "1day-nuclei-kit",
+  "path": "/root/.hermes/skills/security/1day-nuclei-kit/scripts/service_enum.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "1day-nuclei-kit",
+  "path": "/root/.hermes/skills/security/1day-nuclei-kit/scripts/shellcode_gen.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "1panel-panel-pentest",
+  "path": "/root/.hermes/skills/security/1panel-panel-pentest/scripts/1panel_rsa_login.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "1panel-panel-pentest",
+  "path": "/root/.hermes/skills/security/1panel-panel-pentest/scripts/ddddocr_brute_loop.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "admin-console-discovery",
+  "path": "/root/.hermes/skills/security/admin-console-discovery/references/admin-console-credential-sources.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "admin-console-discovery",
+  "path": "/root/.hermes/skills/security/admin-console-discovery/references/observability-plane-recon.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "agent-evidence-gate",
+  "path": "/root/.hermes/skills/security/agent-evidence-gate/references/finalization-contract.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "api-param-name-discovery",
+  "path": "/root/.hermes/skills/security/api-param-name-discovery/references/msg389-wallet-kyc-params.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "api-param-name-discovery",
+  "path": "/root/.hermes/skills/security/api-param-name-discovery/scripts/param_probe.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "apk-recon",
+  "path": "/root/.hermes/skills/security/apk-recon/references/community-security-skills.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "apk-recon",
+  "path": "/root/.hermes/skills/security/apk-recon/references/re-agent-workflow.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "apk-recon",
+  "path": "/root/.hermes/skills/security/apk-recon/scripts/bootstrap-manifest.json",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".json"
+ },
+ {
+  "card": "apk-recon",
+  "path": "/root/.hermes/skills/security/apk-recon/scripts/bootstrap-reverse.sh",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".sh"
+ },
+ {
+  "card": "apk-recon",
+  "path": "/root/.hermes/skills/security/apk-recon/scripts/master-route.sh",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".sh"
+ },
+ {
+  "card": "arsenal-inventory",
+  "path": "/root/.hermes/skills/security/arsenal-inventory/references/lab-validated-exploits.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "auth-brute",
+  "path": "/root/.hermes/skills/security/auth-brute/scripts/extract_user_query_interfaces.py",
+  "fallback": "`references/full.md`",
+  "ext": ".py"
+ },
+ {
+  "card": "card-merchant-platform-pentest",
+  "path": "/root/.hermes/skills/security/card-merchant-platform-pentest/references/php-installer-lock-bypass-rogue-mysql.md",
+  "fallback": "`references/full.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "card-merchant-platform-pentest",
+  "path": "/root/.hermes/skills/security/card-merchant-platform-pentest/scripts/rogue_mysql_server.py",
+  "fallback": "`references/full.md`",
+  "ext": ".py"
+ },
+ {
+  "card": "cdn-origin-tracing",
+  "path": "/root/.hermes/skills/security/cdn-origin-tracing/references/anti-evasion-monitoring.md",
+  "fallback": "`references/full.md`、`references/full-handbook-v5.1.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "cdn-origin-tracing",
+  "path": "/root/.hermes/skills/security/cdn-origin-tracing/references/automation-bash.md",
+  "fallback": "`references/full.md`、`references/full-handbook-v5.1.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "cdn-origin-tracing",
+  "path": "/root/.hermes/skills/security/cdn-origin-tracing/references/automation-python.md",
+  "fallback": "`references/full.md`、`references/full-handbook-v5.1.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "cdn-origin-tracing",
+  "path": "/root/.hermes/skills/security/cdn-origin-tracing/references/cases-and-tools.md",
+  "fallback": "`references/full.md`、`references/full-handbook-v5.1.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "cdn-origin-tracing",
+  "path": "/root/.hermes/skills/security/cdn-origin-tracing/references/cdn-ip-ranges-asn.md",
+  "fallback": "`references/full.md`、`references/full-handbook-v5.1.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "cdn-origin-tracing",
+  "path": "/root/.hermes/skills/security/cdn-origin-tracing/references/methods-01-15.md",
+  "fallback": "`references/full.md`、`references/full-handbook-v5.1.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "cdn-origin-tracing",
+  "path": "/root/.hermes/skills/security/cdn-origin-tracing/references/methods-16-31.md",
+  "fallback": "`references/full.md`、`references/full-handbook-v5.1.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "cdn-origin-tracing",
+  "path": "/root/.hermes/skills/security/cdn-origin-tracing/references/methods-32-41.md",
+  "fallback": "`references/full.md`、`references/full-handbook-v5.1.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "cdn-origin-tracing",
+  "path": "/root/.hermes/skills/security/cdn-origin-tracing/references/methods-42-50.md",
+  "fallback": "`references/full.md`、`references/full-handbook-v5.1.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "cdn-origin-tracing",
+  "path": "/root/.hermes/skills/security/cdn-origin-tracing/references/origin-landing-and-edge-evasion.md",
+  "fallback": "`references/full.md`、`references/full-handbook-v5.1.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "cdn-origin-tracing",
+  "path": "/root/.hermes/skills/security/cdn-origin-tracing/references/space-engine-cookbook.md",
+  "fallback": "`references/full.md`、`references/full-handbook-v5.1.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "cdn-origin-tracing",
+  "path": "/root/.hermes/skills/security/cdn-origin-tracing/references/toolbox-cli.md",
+  "fallback": "`references/full.md`、`references/full-handbook-v5.1.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "cdn-origin-tracing",
+  "path": "/root/.hermes/skills/security/cdn-origin-tracing/references/vendor-bypass.md",
+  "fallback": "`references/full.md`、`references/full-handbook-v5.1.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "cdn-origin-tracing",
+  "path": "/root/.hermes/skills/security/cdn-origin-tracing/references/verification-and-scoring.md",
+  "fallback": "`references/full.md`、`references/full-handbook-v5.1.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "cdn-origin-tracing-v51",
+  "path": "/root/.hermes/skills/security/cdn-origin-tracing-v51/references/vendor-bypass.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "cloud-metadata-harvesting",
+  "path": "/root/.hermes/skills/security/cloud-metadata-harvesting/references/origami-ssrf-case.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "cloud-metadata-harvesting",
+  "path": "/root/.hermes/skills/security/cloud-metadata-harvesting/scripts/ssrf_internal_scan.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "cve-daily-intel",
+  "path": "/root/.hermes/skills/security/cve-daily-intel/scripts/build_clear_entry.sh",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".sh"
+ },
+ {
+  "card": "dart-flutter-reverse",
+  "path": "/root/.hermes/skills/security/dart-flutter-reverse/references/blutter-gfw-bypass.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "dart-flutter-reverse",
+  "path": "/root/.hermes/skills/security/dart-flutter-reverse/scripts/dartvm_make_version.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "epay-admin-pentest",
+  "path": "/root/.hermes/skills/security/epay-admin-pentest/references/niuniuapi-probe.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "frontend-auth-bypass",
+  "path": "/root/.hermes/skills/security/frontend-auth-bypass/references/dujiaoshou-share-leak.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "full-reverse",
+  "path": "/root/.hermes/skills/security/full-reverse/scripts/disasm_guide.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "full-reverse",
+  "path": "/root/.hermes/skills/security/full-reverse/scripts/packet_hook.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "full-reverse",
+  "path": "/root/.hermes/skills/security/full-reverse/scripts/unpacker.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "gambling-api-crypto-reversal",
+  "path": "/root/.hermes/skills/security/gambling-api-crypto-reversal/references/xihu-gofun8-session.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "gambling-api-crypto-reversal",
+  "path": "/root/.hermes/skills/security/gambling-api-crypto-reversal/scripts/signed_api_client.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "gitea-diffpatch-rce",
+  "path": "/root/.hermes/skills/security/gitea-diffpatch-rce/references/exploitarium-pattern-index.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "gitlab-graphql-unauth",
+  "path": "/root/.hermes/skills/security/gitlab-graphql-unauth/templates/gitlab-graphql-cve-2026-19478.yaml",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".yaml"
+ },
+ {
+  "card": "hermes-agent-skill-authoring",
+  "path": "/root/.hermes/skills/software-development/hermes-agent-skill-authoring/scripts/generate-skill-docs.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "hermes-agent-skill-authoring",
+  "path": "/root/.hermes/skills/software-development/hermes-agent-skill-authoring/scripts/run_tests.sh",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".sh"
+ },
+ {
+  "card": "host-tool-bridge",
+  "path": "/root/.hermes/skills/security/host-tool-bridge/references/bot-token-conflict-resolution.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "host-tool-bridge",
+  "path": "/root/.hermes/skills/security/host-tool-bridge/references/discipline-framework.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "host-tool-bridge",
+  "path": "/root/.hermes/skills/security/host-tool-bridge/references/host-disk-cleanup.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "host-tool-bridge",
+  "path": "/root/.hermes/skills/security/host-tool-bridge/references/multibot-ops.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "host-tool-bridge",
+  "path": "/root/.hermes/skills/security/host-tool-bridge/references/pentest-accelerator.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "host-tool-bridge",
+  "path": "/root/.hermes/skills/security/host-tool-bridge/references/pids-exhaustion-recovery.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "host-tool-bridge",
+  "path": "/root/.hermes/skills/security/host-tool-bridge/references/tool-deployment-playbook.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "host-tool-bridge",
+  "path": "/root/.hermes/skills/security/host-tool-bridge/references/tool-install-recipes.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "host-tool-bridge",
+  "path": "/root/.hermes/skills/security/host-tool-bridge/references/wordlists-setup.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "laravel-pentest",
+  "path": "/root/.hermes/skills/security/laravel-pentest/references/version-fingerprint-case.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "long-run-engagement-discipline",
+  "path": "/root/.hermes/skills/security/long-run-engagement-discipline/references/egress-recovery-jump-hosts.md",
+  "fallback": "`references/full.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "long-run-engagement-discipline",
+  "path": "/root/.hermes/skills/security/long-run-engagement-discipline/references/ssh-cred-reuse-and-lock-discipline.md",
+  "fallback": "`references/full.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "network-protocol-attacks",
+  "path": "/root/.hermes/skills/security/network-protocol-attacks/references/exploitarium-pattern-index.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "nginx-rift-cve-2026-42945",
+  "path": "/root/.hermes/skills/security/nginx-rift-cve-2026-42945/templates/nginx-rift-cve-2026-42945.yaml",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".yaml"
+ },
+ {
+  "card": "payment-gate-ladder-probing",
+  "path": "/root/.hermes/skills/security/payment-gate-ladder-probing/references/fenghuang-fhsys-platform.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "pentest-campaign-discipline",
+  "path": "/root/.hermes/skills/security/pentest-campaign-discipline/references/credential-pool-tree-extraction.md",
+  "fallback": "`references/full.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "pentest-campaign-ops",
+  "path": "/root/.hermes/skills/security/pentest-campaign-ops/assets/credentials.json",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".json"
+ },
+ {
+  "card": "pentest-finding-verification",
+  "path": "/root/.hermes/skills/security/pentest-finding-verification/references/9v111-treeal-verification.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "pentest-finding-verification",
+  "path": "/root/.hermes/skills/security/pentest-finding-verification/references/injection-absence-gates.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "pentest-finding-verification",
+  "path": "/root/.hermes/skills/security/pentest-finding-verification/references/offline-external-report-review.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "pentest-finding-verification",
+  "path": "/root/.hermes/skills/security/pentest-finding-verification/references/report-set-genealogy-and-offline-proof.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "pentest-finding-verification",
+  "path": "/root/.hermes/skills/security/pentest-finding-verification/references/tarpit-vs-sqli-discriminator.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "pentest-tools",
+  "path": "/root/.hermes/skills/security/pentest-tools/references/angularjs-login-re.md",
+  "fallback": "`references/full.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "pentest-tools",
+  "path": "/root/.hermes/skills/security/pentest-tools/references/card-shop-frameworks.md",
+  "fallback": "`references/full.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "pentest-tools",
+  "path": "/root/.hermes/skills/security/pentest-tools/references/crypto-trading-platform-pentest.md",
+  "fallback": "`references/full.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "pentest-tools",
+  "path": "/root/.hermes/skills/security/pentest-tools/references/fastapi-swagger-detection.md",
+  "fallback": "`references/full.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "pentest-tools",
+  "path": "/root/.hermes/skills/security/pentest-tools/references/flask-tg-management-probe.md",
+  "fallback": "`references/full.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "pentest-tools",
+  "path": "/root/.hermes/skills/security/pentest-tools/references/fofa-batch-scanning.md",
+  "fallback": "`references/full.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "pentest-tools",
+  "path": "/root/.hermes/skills/security/pentest-tools/references/php-card-shop-jwt-analysis.md",
+  "fallback": "`references/full.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "pentest-tools",
+  "path": "/root/.hermes/skills/security/pentest-tools/references/spring-boot-admin-login-bypass.md",
+  "fallback": "`references/full.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "pentest-tools",
+  "path": "/root/.hermes/skills/security/pentest-tools/references/tg-faka-fofa-patterns.md",
+  "fallback": "`references/full.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "pentest-tools",
+  "path": "/root/.hermes/skills/security/pentest-tools/references/vue-spa-springboot-pentest.md",
+  "fallback": "`references/full.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "pentest-tools",
+  "path": "/root/.hermes/skills/security/pentest-tools/references/vue3-spa-api-discovery.md",
+  "fallback": "`references/full.md`",
+  "ext": ".md"
+ },
+ {
+  "card": "pentest-tools",
+  "path": "/root/.hermes/skills/security/pentest-tools/scripts/fofa-search.py",
+  "fallback": "`references/full.md`",
+  "ext": ".py"
+ },
+ {
+  "card": "pentest-working-report",
+  "path": "/root/.hermes/skills/security/pentest-working-report/references/zpay-gateway-sn-leak-idor-chain.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "php-debug-mode-exploitation",
+  "path": "/root/.hermes/skills/security/php-debug-mode-exploitation/references/8gtg-embracedream-chain.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "php-framework-debug-leak-pentest",
+  "path": "/root/.hermes/skills/security/php-framework-debug-leak-pentest/references/8g-kk8-infra-map.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "php-framework-pentest",
+  "path": "/root/.hermes/skills/security/php-framework-pentest/scripts/discuz-enumerate_mobile_api.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "php-mvc-app-pentest",
+  "path": "/root/.hermes/skills/security/php-mvc-app-pentest/references/oracle-extraction-false-negatives.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "recaptcha-bypass",
+  "path": "/root/.hermes/skills/security/recaptcha-bypass/references/tv-hub-2026-08.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "reverse-skill",
+  "path": "/root/.hermes/skills/security/reverse-skill/references/community-security-skills.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "reverse-skill",
+  "path": "/root/.hermes/skills/security/reverse-skill/references/re-agent-workflow.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "reverse-skill",
+  "path": "/root/.hermes/skills/security/reverse-skill/scripts/bootstrap-manifest.json",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".json"
+ },
+ {
+  "card": "reverse-skill",
+  "path": "/root/.hermes/skills/security/reverse-skill/scripts/bootstrap-reverse.sh",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".sh"
+ },
+ {
+  "card": "reverse-skill",
+  "path": "/root/.hermes/skills/security/reverse-skill/scripts/master-route.sh",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".sh"
+ },
+ {
+  "card": "reverse-skill",
+  "path": "/root/.hermes/skills/security/reverse-skill/scripts/refresh-tool-index.sh",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".sh"
+ },
+ {
+  "card": "ruoyi-fork-admin-pentest",
+  "path": "/root/.hermes/skills/security/ruoyi-fork-admin-pentest/references/feitou-tgbet-farm.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "ruoyi-fork-admin-pentest",
+  "path": "/root/.hermes/skills/security/ruoyi-fork-admin-pentest/references/fina-xwallet-farm.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "ruoyi-fork-admin-pentest",
+  "path": "/root/.hermes/skills/security/ruoyi-fork-admin-pentest/scripts/ddddocr_login_brute.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "skill-pack-absorption",
+  "path": "/root/.hermes/skills/security/skill-pack-absorption/references/y.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "spa-backend-api-pentest",
+  "path": "/root/.hermes/skills/security/spa-backend-api-pentest/references/tradesai-case.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "space-mapping-engine-recon",
+  "path": "/root/.hermes/skills/security/space-mapping-engine-recon/templates/cdp_ui_query.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "stable-diffusion-webui-rce",
+  "path": "/root/.hermes/skills/security/stable-diffusion-webui-rce/scripts/colab.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "telegram-bot-discovery",
+  "path": "/root/.hermes/skills/security/telegram-bot-discovery/scripts/enumerate_tma_bots.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "tg-cloud-control-pentest",
+  "path": "/root/.hermes/skills/security/tg-cloud-control-pentest/references/konkcc-20260802.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "tg-cloud-control-pentest",
+  "path": "/root/.hermes/skills/security/tg-cloud-control-pentest/scripts/extract_workorder.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "v2rayn-proxy-ops",
+  "path": "/root/.hermes/skills/security/v2rayn-proxy-ops/references/selfbuilt-node-and-chain.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "vben-admin-pentest",
+  "path": "/root/.hermes/skills/security/vben-admin-pentest/references/manyunvip-case.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ },
+ {
+  "card": "vben-admin-pentest",
+  "path": "/root/.hermes/skills/security/vben-admin-pentest/scripts/get_vben_api_surface.py",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".py"
+ },
+ {
+  "card": "whitelabel-gambling-pentest",
+  "path": "/root/.hermes/skills/security/whitelabel-gambling-pentest/references/lsm99-mclsm-family.md",
+  "fallback": "`SKILL.md` 正文",
+  "ext": ".md"
+ }
+]

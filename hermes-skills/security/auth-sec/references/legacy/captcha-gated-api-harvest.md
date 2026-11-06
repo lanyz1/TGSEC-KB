@@ -1,0 +1,78 @@
+<!-- archived from /root/.hermes/skills/security/captcha-gated-api-harvest/SKILL.md on 2026-10-21 -->
+
+---
+name: captcha-gated-api-harvest
+description: 人机验证挡住的免鉴权接口取数:换票闭环+读码吐吞+枚举轴判定。
+---
+
+> 归档卡：原目录 `/root/.hermes/skills/security/captcha-gated-api-harvest`。卡内 `references/…`、`scripts/…`、`templates/…` 均相对原目录；读取用 `read_file('/root/.hermes/skills/security/captcha-gated-api-harvest/…')`，不要相对 `references/legacy/` 解析。
+
+# captcha-gated-api-harvest
+
+**前提**：目标在 scope。闸门后的**写**面（下单/提现/改密/绑定）按案卷授权单独判。
+
+适用形状：前端有人机验证，闸门后面是一个**只要票、不要登录**的查询/枚举 API —— 即「闸门就是唯一的鉴权」。
+
+## 0 判闸门归属（先做，别急着写识别器）
+
+| 观象 | 归属 | 打法 |
+|------|------|------|
+| 前端 chunk 出现 `sign = md5(...)` / `check_url` / 常量盐 | **自研** | 本卡：本地算 sign，不需浏览器 |
+| `initGeetest` / `TencentCaptcha` / `altcha` / `hcaptcha` | 第三方 | `captcha` · `geetest-captcha-bypass` · `frontend-auth-bypass` |
+| 浏览器自动化被 `disable-devtool` 类反制 | — | `browser-cdp-pentest` |
+| 登录/注册整体被闸门挡，要先判能不能不需要浏览器打通 | — | `captcha-gate-triage` |
+
+自研闸门的常规形状（打通一次就能复制）：
+
+```
+POST <captchaStart> {code:""}        → {img_url, check_url, ip}
+POST <check_url>    {code, sign}     → {code:1, data:{ticket}}
+<业务 API>          {..., ticket}    → 放行
+sign = md5( md5(code + ip) + "<盐>" )   ← 盐/层数在 chunk 里，逐字核大小写
+```
+
+- **签名构造要交叉核对**：同一条链里常见两个 chunk 各实现一份；不一致时以「真提交回成功」的那份为准。
+- `check_url` **用 `captchaStart` 返回的原样**，不要硬编码路径（老版本路径 ≠ 现行路径）。
+- 取图与提交必须**同一 cookie 会话**；`ip` 用 `captchaStart` 回的值，不要填自己的出口 IP。
+
+## 1 并发模型（决定吐吞，最易踩）
+
+- **票一次性**：一张票一个业务请求，二次使用报「人机验证失败」。
+- **单会话只保一张有效图**：同会话再 `captchaStart` 会**作废上一张**（旧图再拉回 0 字节）⇒ 批量取图**每张一个独立 cookie jar**（curl 用不同 `-c/-b`；requests 用独立 `Session`）。
+- 于是吐吞 = 读码速度，不是请求速度 —— 优化目标在 §2。
+
+## 2 读码吐吞：联系表一次读全
+
+- 每张图放大 6-10x，**N 张纵向拼成一张带行号的联系表**（`scripts/captcha_contact_sheet.py`），一次视觉调用读 N 个码 —— 比逐张读快一个数量级。
+- **主字符 = 粗体深色，干扰字 = 浅色**；形近字（`0/O`、`1/I/l`、`5/S`、`8/B`、`q/9/g`、`b/6`、`t/f`）对最左/最右位逐字符 region 放大复核。
+- **失败先怀疑读数**：回「验证码不正确」就重取一张重读，不要先改公式。自读准确率约六成属正常 ⇒ 批量按 ~40% 重试预算规划请求数。
+- 长脚本落盘：**内联超长 heredoc / 字符串会被上下文压缩截断** ⇒ `write_file` 落盘（分片写、写后校验尾部）再上传跳板机执行；跳板机执行器只吃**脚本文件**，不吃内联命令。
+
+## 3 闸门后 API 的语义判定（决定这条路能不能“全量”）
+
+同一接口跑**四组对照**，其余别猜：
+
+| 输入 | 结论 |
+|------|------|
+| 空 | 报「请输入」= 参数必填，不是可选项 |
+| 单字符 / `%` / `_` | 有数据回 = LIKE/模糊；全 0 = 精确匹配、无通配 |
+| 已知真实值（别处拿到的 ID/手机/订单号） | 有回 = 语义确认 + 拿到返回字段全貌 |
+| 无关值（另一字段类型的真实值） | 排除“其实匹配的是别的字段” |
+
+返回字段本身就是新面：列表接口常回吐 `user.token`（店铺/租户标识）、对象 `id`、内部 `key`。拿到就去找哪个头/哪个端点吃它（典型：拿它当另一个端的认证头试探，不行也算证伪一次）。
+
+**若无枚举轴**（精确匹配一个不可枚举的字段），这条路到此为止：转 token/管理端面，**别在原接口上刷分页**。命中密度是判据：若已知数据只落在少量取值上，瓶颈就是**枚举取值**，不是分页。
+
+## 4 续命与限速
+
+闸门/风控的「每 IP 预算」「操作频繁」多按 `X-Forwarded-For` / `Client-IP` / `True-Client-IP` 记账 ⇒ **逐请求轮换一个随机 IP 头**即可持续作业（见 `trusted-ip-header`）。裸打 502/000/RemoteDisconnected 时**先加 `True-Client-IP: 127.0.0.1` 重发**，不要把这种吐属归因成「出口被封」去换 IP。
+
+## 5 零写入纪律
+
+- 探写面（改密/绑定/找回）一律用**缺字段 / 类型错 / 不存在的对象 + 合法长度值**，绝不真改他人数据。
+- **存在性 oracle**：校验类接口若按「对象 → 凭证」顺序报错（`对象不存在` vs `凭证不正确`），用错误凭证探测即**零写入**地枚举有效对象；批量枚举完再谈下一步。
+- 闸门后的读取本身也要守边界：未兑换/未使用/未外发。
+
+## 参考
+- `references/gate-probing-recipes.md` — 签名提取流程、四组对照实测模板、oracle 消息判别表、卡点→转场表
+- `scripts/captcha_contact_sheet.py` — N 张验证码图 → 带行号联系表（一次读全）

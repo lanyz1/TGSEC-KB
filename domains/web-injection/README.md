@@ -1,0 +1,58 @@
+# web-injection
+
+攻击面知识域 — **983 个文件** / 31 个子目录
+
+## 子目录
+```
+Payload
+Vuln
+cmd-injection
+cmdi-command-injection
+expression-language-injection
+hunt-deserialization
+hunt-file-upload
+hunt-lfi
+hunt-sqli
+hunt-ssrf
+hunt-ssti
+hunt-xss
+hunter-6000
+injection-checking
+nosql-injection
+playbook-6000
+prototype-pollution
+prototype-pollution-advanced
+sqli
+sqli-sql-injection
+src-methods
+ssrf
+ssrf-server-side-request-forgery
+ssti
+ssti-server-side-template-injection
+web-method
+xslt-injection
+xss
+xss-cross-site-scripting
+xxe
+xxe-xml-external-entity
+```
+
+## 融合亮点
+
+- `playbook-6000/` — 测试方法论 playbook
+- `hunter-6000/` — offensive skills
+- `src-methods/` — SRC 漏洞测试方法
+
+---
+@TGSEC社区 · @TGSEC-Qtzuu 整理
+
+<!-- fused:TORCH + SQL wordlist (2026-09-08) -->
+## TORCH + SQL wordlist (2026-09-08)
+
+- `torch-wiki/` / `torch-hunt/` — TORCH technique pages + hunt-sqli/xss/ssrf/rce/injection/deserialization
+- `Payload/sqli/sql-wordlist-orwa.txt` + `payload-orwa-unique.txt` — SQLi fuzz wordlist
+- Prefer unique payload file before full everything.txt at `/root/SQL-Wordlist/everything.txt`
+
+## 猎洞十二技（2026-09-17）
+
+见 `src-methods/hunter12-*`（五步猎洞法手册，来自 web-security-skills 差分融合）。

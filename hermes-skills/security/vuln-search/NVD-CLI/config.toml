@@ -1,0 +1,8 @@
+api_key = ""
+cache_enabled = true
+cache_dir = "cache"
+cache_ttl = 1800
+timeout = 30
+max_retries = 3
+max_threads = 0
+thread_delay = 0.6

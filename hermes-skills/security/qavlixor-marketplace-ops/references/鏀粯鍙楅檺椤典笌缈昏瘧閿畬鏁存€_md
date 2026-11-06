@@ -1,0 +1,35 @@
+# 支付受限页 / 翻译键完整性(2026-08-13)
+
+## 支付受限页(`/checkout/payment-restricted`)——用户要求的中性化规范
+
+**用户偏好:通道不可用提示必须中性简洁,禁止"风控/威胁"措辞,页面不出现"待接/演示"类不正规字样。**
+
+### 文案重设计(payr.* 键,6 语言已同步)
+- 旧:支付风控提示 / 该支付通道暂时无法完成支付 / "该通道当前触发平台风控策略,为保障您的资金安全已被临时限制" / 风控编号 RC-PAY-CHANNEL
+- 新:**支付方式不可用 / 该支付通道暂无可支付方式 / 该通道当前暂不可用,请切换其他支付方式完成订单。** / 提示只留:订单信息已保留可继续结算、推荐 USDT(TRC20)、如有疑问联系客服 / 脚注"如有疑问请联系平台客服"
+- 页内 method 参数来自查询串,提示里 USDT(TRC20) 是支付通道名,卡片要标 `data-currency-lock`
+
+### 充值面板"待接"提示
+- `SellerChargePanel` 非 USDT 通道(卡组/ApplePay/GooglePay/PayPal/Wise)原有一条 `[待接] 该支付通道正在接入中…` 提示条 → **用户要求整体删除**(跳转受限页后自带原因,列表内提示显得不正规);连带删除未使用的 demoTagStyle 常量
+
+### 双层白背景修复
+- `.buyer-portal .wholesale-checkout-page` 是 1120px **白色横条**(白底 + 白卡片 = 双层白,卡片看不出层次)
+- 修复:页面 section 加专用类 `payment-restricted-page`,CSS `.buyer-portal .payment-restricted-page { background: transparent }` → 透出 body `--bg`(#f7f8fa 浅灰),只剩卡片一层白
+- 注意 wholesale-checkout-page 被结账页/购物车页共用,不能全局改 background,必须用页面专用类精准覆盖
+
+## 翻译键完整性——"这句没纳入翻译系统"排查套路
+
+用户反馈某句没翻译时,按三层排查(顺序执行,漏一层就返工):
+
+1. **translations.ts 键存在且 6 语言齐全**:`grep -c '"key"' lib/translations.ts` 必须 = 6(索引顺序 [zh,en,es,fr,pt,ru] 按文件行序)
+2. **生产 UiTranslation 表覆盖**:`prisma.uiTranslation.findMany({ where: { source: { in: [...] } } })` — 键在 code 内即可翻译(getTranslation 读内置字典不查 DB),但"纳入翻译系统"的完整性要求 console 键也 upsert 进生产表(scope='console',i18nJson 六语言对象)
+3. **硬编码中文**:grep 该句的中文片段(`grep -rn "关键词" app/ components/`)— 组件里常有用 `getTranslation` 拼接但漏了某段硬编码中文(如 `"当前保证金差额"` 手写)
+
+### 片段拼接键(ui.sel.404/405/406)陷阱
+- 组件组装:`getTranslation(404) + num(gap) + getTranslation(405) + date + getTranslation(406)` — **每个片段值必须自带正确的前后空格/标点**,否则英文拼出 `difference1,700USDT…before2026-08-19`(缺空格)或西/法语词序错乱(硬凑翻译)
+- 规范化示例(en):404="Sales scale triggered a tiered security deposit. Difference: " / 405=" USDT — please pay the difference before " / 406=" (listing stays normal during the grace period; withdrawals are limited by the difference)."
+- 同区域键一并检查(407/408 配套,别漏);批量替换用脚本:每键 6 处匹配按文件序对应 6 语言,从后往前替换防偏移
+
+### 验证
+- getTranslation 读 `translations[code][key]`,缺键回退 zh-CN 再回退 key;defaultLanguage=en、fallback=zh-CN
+- 无头默认俄语是 SSR 语言(不设 localStorage),切语言验证直接读 translations.ts 值 + 生产 UiTranslation 校验即可

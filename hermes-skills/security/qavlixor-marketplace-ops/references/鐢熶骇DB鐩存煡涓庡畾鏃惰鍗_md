@@ -1,0 +1,48 @@
+# 生产 DB 直查/直改 + 定时生成订单链路(2026-08-13)
+
+## 生产环境真实路径(易走弯路)
+- 应用部署在 **`/www/tiktok`**(不是 `/root/qavlixor`,不是 `/root/qavlixor-marketplace`)
+- 数据库:PostgreSQL `postgresql://qavlixor:***@127.0.0.1:5432/qavlixor_prod`,密码在 `/www/tiktok/.env` 的 `DATABASE_URL`
+- PM2 4 fork 实例(3000-3003),next-server 监听 3000/3003(实测仅 2 个在听);cron 脚本 `APP_BASE_URL` 默认 3000
+- 服务器本地 curl 卖家/管理端页:走 `http://localhost:3003/...` 绕 CF 缓存;外部 curl 会看到 CF 旧缓存
+
+## psql 直查/直改(比 node -e 跑 Prisma 稳)
+- **坑1:node -e 直接 require PrismaClient 会输出 client 生成代码**(路径/环境问题),别用;用 psql
+- **坑2:psql -c "..." 内嵌多引号 SQL 多层转义会静默失败/空输出**(psql -c '\d "Table"' 等);**复杂 SQL 一律 sftp 写远程文件 + `psql -f /tmp/q.sql`**
+- 取密码:`grep -o 'DATABASE_URL="[^"]*"' /www/tiktok/.env | head -1` → 正则提取
+- 连接:`PGPASSWORD='...' psql -h 127.0.0.1 -U qavlixor -d qavlixor_prod -f /tmp/q.sql`
+- 表名全双引号驼峰:`"Order"` `"Store"` `"ScheduledOrderJob"` `"PaymentTransaction"`;列 `"orderNo"` `"createdAt"` 等
+
+## 店铺归属链(查某邮箱的店铺/订单)
+`Store.sellerAccountId → SellerAccount.id → SellerAccount.userId → User.id → User.email`
+(SellerAccount 无 email 列,别直接 JOIN email)
+
+## 卖家端登录/页面验证
+- 登录 API = 主站 `/api/auth/login` **必须带 body `role:"seller"`**,否则返回"该账号是商户账号,请从商户端登录"(403)
+- 拿 cookie:`curl -s -c /tmp/sk.txt -X POST http://localhost:3003/api/auth/login -H "Content-Type: application/json" -d '{"email":"...","password":"...","role":"seller"}'`
+- 然后 `curl -s -b /tmp/sk.txt http://localhost:3003/seller | grep -oE "期望词"` 看 SSR 直出
+- 卖家测试账号 <EMAIL-REDACTED> / QaTest!2026(生产)
+
+## 定时生成订单时间戳链路(2026-08-13 修复)
+- **列表页"下单时间" = 订单号前 12 位**(`yyMMddHHmmss`,19 位纯数字),**不是 DB createdAt** —— 改时间必须同时改订单号前缀
+- 定时模式生成时订单号必须带计划时间:`generateOrderNo(buyerKey, plannedAt)`(第二参数 date),否则订单号=cron 执行时刻,列表全挤在一起
+- 计划时间生成:`start + Math.random()*span` 均匀随机 + 升序(route.ts:80)
+- 执行器 cron:`* * * * * ... flock -n /tmp/qav-sched.lock node scripts/process-scheduled-orders.mjs`(每分钟)调 `/api/cron/scheduled-orders`
+- **鉴权头是 `x-cron-secret`(不是 Bearer)**;settlement 用 Bearer,别混
+- **生产曾缺 `scripts/process-scheduled-orders.mjs`**(部署未同步 scripts/ 目录)→ 定时任务全卡"待执行";已修复 + `run-scheduled-tasks.mjs` 补了调用(双保险,幂等)
+- 表现:"待执行 0/N"不一定是 bug —— 先查 `ScheduledOrderItem.plannedAt` 是否在未来
+- job 信息表:`ScheduledOrderJob`(jobNo/startTime/endTime/status/count)+ `ScheduledOrderItem`(plannedAt/status/orderNo)
+
+## 生产历史订单时间修正模式(本批 142 单实测)
+1. 查 job:`SELECT "jobNo", count, "startTime", "endTime" FROM "ScheduledOrderJob" WHERE "jobNo"='SO...'`
+2. 构造新号:`to_char(plannedAt,'YYMMDDHH24MISS') || substr(旧orderNo,13)`(保留后 7 位 random3+tail4)
+3. 事务更新:`Order.orderNo+createdAt` ← plannedAt;`ScheduledOrderItem.orderNo` 同步
+4. **PaymentTransaction.orderNo 用 `orderId`(内部 id)JOIN Order 拿新号**——旧号已丢失,不能按 orderNo 匹配(顺序坑:先改 Order/ScheduledOrderItem 后旧号没了,再用 orderId 兜底)
+5. AfterSaleCase 无关联则跳过;改前查新号冲突(与现存 Order.orderNo 冲突 + job 内互撞)
+6. 验证:订单号前 12 位 == createdAt 格式化一致;按天分布铺开
+
+## 翻译键纪律补充(中英混杂 bug 案例)
+- 卖家端**所有可见文本必须走翻译系统**:translations.ts 6 语言 + 组件 `data-i18n={key}` 属性 + 生产 UiTranslation 表(scope=console 覆盖)
+- 只写 data-i18n 属性不够,键必须在 translations.ts 6 语言齐全(grep -c 每键=6)
+- 案例:硬编码"昨天"按钮 → 其他按钮被翻译脚本替换、它漏掉 → 中英混杂;修复=加 5 个键 `seller.dashboard.rangeToday/rangeYesterday/range7/range14/range30`
+- KPI"昨天"= 独立单日窗口(昨天0点→今天0点,环比前天),不是"近1天";图表联动时 yesterday → 显示近7天

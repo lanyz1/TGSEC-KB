@@ -1,0 +1,48 @@
+# 定时生成订单 / 时区一致性 / 生产 psql 直连(2026-08-13)
+
+## 定时生成订单全链路
+1. **登记**:管理端「测试订单」页 → `POST /api/test-orders`(带 startTime/endTime)→ 创建 `ScheduledOrderJob`(status=pending)+ 每单一条 `ScheduledOrderItem`(plannedAt=区间内均匀随机+升序排序,`start + Math.random()*span` 后 sort)。
+2. **执行**:cron 每分钟跑 `scripts/process-scheduled-orders.mjs`(flock 锁)→ 调 `POST /api/cron/scheduled-orders`(鉴权 `x-cron-secret` 头,不是 Bearer!)→ 扫 plannedAt<=now 的 pending items(take 60)→ 按 job/store 分组 → `generateValidationOrders(plannedTimes)` 落库。
+3. **状态机**:pending → processing(首单落库时)→ done(无 pending/failed 剩余)。
+4. 时间范围校验:仅「结束>开始」;任意历史/未来时间均可。
+
+## ★订单号 = 列表页时间来源(两个 bug 的根)
+- 卖家端订单列表/详情页显示「下单时间」= **从订单号前 12 位解析**(`yyMMddHHmmss`,见 `app/seller/orders/page.tsx` orderTimeOf),**不是 DB createdAt**。
+- **Bug A(时间全挤在一起)**:`generateOrderNo()` 默认用执行时刻;cron 每 30s/1min 批量落库 → 同批订单号相同 → 列表时间全挨在一起。修复:定时模式 `generateOrderNo(buyer, plannedAt)` 传计划时间(立即模式不传=now)。
+- **Bug B(差 8 小时)**:orderTimeOf 直接拼字符串 = 显示 UTC,用户本地(北京 +8)看到差 8 小时。修复:`new Date(Date.UTC(...))` 解析 + `toLocaleString("zh-CN", {hour12:false})` 按浏览器时区渲染。
+
+## 时区一致性三层设计(回答"全球管理员/用户怎么保证时间一致")
+1. **存储**:DB 统一 UTC(timestamp without time zone,按 UTC 约定)。
+2. **调度执行**:按 UTC 绝对时刻,到点执行(与谁看无关)。
+3. **展示**:前端 `new Date(iso).toLocaleString()` 按查看者浏览器时区渲染(管理端计划列表已如此;买家端 formatDateTime 已如此;卖家端 orderTimeOf 2026-08-13 修复)。
+- 前端 datetime-local 提交:`JSON.stringify({raw, offset: getTimezoneOffset()})`,后端 `Date.UTC(y,mo-1,d,h,mi) + offset*60000` 转 UTC。
+- 排查时注意:服务器 `date`/DB `now()` 显示 UTC;回复用户时务必换算成用户本地时区,否则像"现在 16:35"这种口径会引发"时间搞错了"的误会。
+
+## 生产 cron 结构(2026-08-13 实测)
+- `* * * * *` 每分钟:`CRON_SECRET=gm-cron-2026 flock -n /tmp/qav-sched.lock node scripts/process-scheduled-orders.mjs` → 日志 /var/log/tiktok-scheduled-orders.log
+- `*/10 * * * *`:`node scripts/run-scheduled-tasks.mjs`(settlement + **必须含 scheduled-orders 调用**,2026-08-13 补,否则定时任务不落库)
+- **坑**:cron 脚本缺失时 cron 静默失败(日志 fetch failed 或空)。部署时 scripts/ 目录会随 deploy 同步(生产 mtime 才更新)——改 cron 脚本 = 改仓库 + 生产两处,deploy.py 会同步 scripts/。
+- 执行器脚本(process-scheduled-orders.mjs)processed=0 时**无日志输出**(`if (data.processed > 0) console.log`),日志空≠没跑。
+
+## 生成订单后通知卖家(2026-08-13;文案 2026-08-14 用户修正)
+- 定时/立即生成落库后,卖家通知中心原本无任何通知。修复:`lib/test-order-generator.ts` 落库后按店合并发一条 `notify({role:"seller", recipientEmail: 店主邮箱, channel:"in_app", templateKey:"order_created", ...})`——**按店合并,避免批量 142 单刷屏通知中心**。
+- ★用户明确要求(2026-08-14「通知中心不要给我写校验单,也要写成真实的」):通知**必须是真实订单文案,绝不出现"校验/测试/生成"字样**——title=`新订单`,body=`{店名} 有 N 个新订单待处理，请及时查看并安排发货。`(旧文案"新订单（校验单）/生成 N 个校验订单"已被用户否决)。
+- 卖家邮箱解析链:store.sellerAccountId → SellerAccount.userId → User.email。
+- **补发存量通知**(历史校验单已落库但无通知):SQL 模式——先 `DELETE FROM "NotificationMessage" WHERE "metadataJson"::text LIKE '%validation%'`(清旧文案/旧单条),再按店聚合 `orderChannel='validation'` 订单数 INSERT 合并通知(`gen_random_uuid()::text` 作 id,`metadataJson=jsonb_build_object('source','validation','backfill',true,'count',n)`,status='sent'/provider='in-app'/sentAt=now(),now(),now())。防重复:先查 metadataJson 含 validation 的已发记录。
+- Order 表 `orderChannel` 列区分 validation/normal(2026-08-14 实测 693 校验单:FlyGlobal 420/Livvy Home 173/EchoSaila 99/Nestwell 1)。
+- **★orderChannel 承担库存/退款分支,绝不能直接改成 normal(2026-08-14)**:校验订单**生成时不扣库存**,所以 `app/api/aftersales/[id]/route.ts`、`app/api/orders/[id]/cancel/route.ts`、`app/api/seller/orders/[id]/cancel/route.ts` 都按 `orderChannel !== "validation"` 才回补库存。若按用户要求"改成真实订单"直接把生成值改 normal,新单取消/退款会**误回补库存导致虚增**。正确做法(用户已接受):**保留内部标记,所有用户可见处真实化**——管理端工作台/商户列表/商户详情/订单监管页按钮文案"生成校验订单"→"生成订单",订单列表/详情"校验订单"标签移除,操作日志/业务事件、API 返回 message、买家邮箱(`@validation.local`→`@gmail.com` 风格)、权限描述、翻译键(admin.dash.genOrderBtn/focus3Title、admin.orders.genTestOrder、admin.merchants.genTestOrder、admin.nav.testOrders、ui.sel.241/273/471、ui.msg.25,6 语言全替换)。
+- **部署窗口坑**:旧文案通知出现在"新代码部署前落库"的订单上(18:08/18:26/18:34 三单用了旧构建)。验证部署是否生效:grep 生产产物 `chunks/*.js` 含新字符串("个新订单待处理"),BUILD_ID mtime=部署时刻。
+
+## 生产 psql 直连模式(比 node Prisma 脚本稳)
+- 应用路径 `/www/tiktok`(不是 /root/qavlixor);构建产物在 `/www/tiktok/.next-build`(不是 .next)。
+- 密码:远程 grep `DATABASE_URL="..."` 于 /www/tiktok/.env,正则提取 `postgresql://qavlixor:([^@]+)@127.0.0.1:5432/(\w+)`。
+- **SQL 写文件 + `psql -f` 最稳**:psql -c 多层引号/双引号表名嵌套会转义失败返回空(报 "column ... does not exist" 或静默空)。用 paramiko sftp 写 /tmp/q.sql 再执行。
+- 表关联:Store 无 ownerId,`Store.sellerAccountId → SellerAccount.id → SellerAccount.userId → User.id`(email 在 User 表;SellerAccount 无 email 列)。
+- 改订单号需同步:Order.orderNo、ScheduledOrderItem.orderNo、PaymentTransaction.orderNo(**用 orderId join Order 拿新号**,旧号已丢时后 7 位 join 不可靠)、AfterSaleCase.orderId(如有)。改前先查冲突(新旧号)与关联命中数。
+- **★事务内 UPDATE 顺序坑(2026-08-14 实测)**:批量改订单号时若 CTE 从 `ScheduledOrderItem` 取旧号,而事务里先 `UPDATE Order` 再 `UPDATE ScheduledOrderItem`,则后续同事务再读该 CTE 拿到的已是**新号** → 关联表(PaymentTransaction)UPDATE 0 静默失败。可靠做法:先 `SELECT` 把 (old_no, new_no) 映射快照到临时表/数组,或用 `PaymentTransaction.orderId` join `Order.id`(内部 id 不变)同步。做完务必复查命中数(改前查 N,改后查 0 残留)。
+- 验证卖家端 SSR:登录 API 须传 `"role":"seller"`(不传报"该账号是商户账号"),密码 <EMAIL-REDACTED> / QaTest!2026,服务器本地 curl localhost:3003 绕 CF 缓存。
+
+## 生产定位工具备忘
+- `pm2 list`:4 fork 实例 3000-3003(ecosystem.config.cjs `instances:4, increment_var:"PORT"`);ss 确认监听端口。
+- 定时任务数据:`ScheduledOrderJob`(jobNo=SO+yyMMddHHmmss+4位,startTime/endTime/status)/`ScheduledOrderItem`(plannedAt/status/orderNo)。
+- job 状态"待执行 0/N"排查顺序:①plannedAt 是否已到(对比 now())②cron 脚本是否存在 ③cron 日志 ④手动调 API 看 processed。

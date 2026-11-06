@@ -1,0 +1,141 @@
+---
+title: "测绘引擎网络验证与卡密作业手法.md"
+generated: 2026-10-21
+kind: consolidated-playbook
+note: 由现役技能卡自动汇总；保留原卡语义，未改写攻防步骤
+---
+
+# 测绘引擎网络验证与卡密作业手法.md
+
+> 本页由引用该路径的现役技能卡汇总生成。原始内容与完整步骤见下方来源卡；不要把它当成独立的新打法。
+
+## 来源卡
+
+- `/root/.hermes/skills/security/net-license-crack/SKILL.md`
+
+## 汇总内容
+
+### net-license-crack
+
+来源：`/root/.hermes/skills/security/net-license-crack/SKILL.md`
+
+# 网络验证与卡密（测绘引擎）
+
+目标须在 scope，或案卷里的 **授权本地样本**。  
+授权内默认打到 **L2**：抽出认证 URL + 校验算法/RSA，或恢复卡密格式。  
+先问只剩：对他人发行版做注册机散播、改原超管密。
+
+| 档 | 成立 | 不算 |
+|----|------|------|
+| L1 | 认出 Nuitka/PyInstaller/天盾/fndata 或 checkLicense | 只 `strings` 到 UPX |
+| L2 | 认证 URL + RSA/符号，或样本卡密同构，或 XOR 钥流 | 随机生成假 CD-Key |
+| L3 | 授权样本补丁（有 .bak）或假认证响应被客户端吃 | 没备份就写盘 |
+
+## 立刻跑
+
+```bash
+python3 tools/ops/net_license_probe.py drive --path <样本.exe|.apk|.bin> --case <案>
+python3 tools/ops/net_license_probe.py format --sample 'ABCD-1234-WXYZ' --sample 'EFGH-5678-QRST'
+python3 tools/ops/net_license_probe.py xor --plain known.bin --cipher enc.bin
+python3 tools/ops/net_license_probe.py patch-plan --path <PE>
+# 授权样本才 --apply（先备份）
+python3 tools/ops/net_license_probe.py patch-plan --path <PE> --apply --case <案>
+# 假认证（只给授权样本指 127.0.0.1）
+python3 tools/ops/net_license_probe.py serve --host 127.0.0.1 --port 8765
+# Nuitka/PyInstaller 先认 TOC
+python3 tools/ops/py_pack_reverse.py drive --path <样本> --case <案>
+```
+
+产物：`测绘/net_license/surface.json`。
+
+六步：
+
+```text
+① drive 认壳 / 天盾 / fndata / Nuitka
+② 抽 license/activate URL 与 RSA PEM
+③ 有真卡密样本 → format 恢复格式，禁止瞎编 Windows 风格 Key
+④ 已知明文 → xor 抽钥流
+⑤ 在线验证：hosts/mitm 假 200（仅授权样本）
+⑥ 短 JE 计划；--apply 才写，必须 .bak
+```
+
+## 交接
+
+| 认到 | 走 |
+|------|----|
+| Unity / IL2CPP / 外挂 | `client-crack-cheat` |
+| H5 isPaid / 前端 VIP | `client-state-skip` |
+| 发卡站 / 卡密商城 | `faka-card-shop-pentest` / `acg-faka` |
+| 反调试自毁 0xc000041d | 本卡认面后 `anti-debugging-techniques` |
+| Electron asar | `thick-client` |
+
+## 真源
+
+- 手法：`docs/playbooks/测绘引擎网络验证与卡密作业手法.md`
+- 探针：`tools/ops/net_license_probe.py`
+
+---
+
+<!-- 补充视角: crack-keygen (兄弟技能库 2026-09-12) -->
+
+
+# Crack & Keygen — Complete Toolkit
+
+## Scripts
+
+- `scripts/keygen.py` — RSA/XOR/timed/HWID/name-based key generation
+- `scripts/patch_binary.py` — Binary patching: JE→JMP, NOP sled, conditional bypass, hex editing
+- `scripts/license_bypass.py` — Android/iOS/SQLite license DB patcher, trial reset, shared_prefs
+
+## Workflow
+
+```
+1. Identify Target → strings/objdump/IDA locate check function (checkLicense/verifyKey/validateSerial)
+2. Analyze Logic   → reverse key verification algorithm, extract constants/seeds/public keys
+3. Bypass Strategy  → patch binary (JMP over check), generate valid keys, spoof server response
+4. Implement        → write keygen/patch script, test on target, verify functionality
+5. Package          → provide keygen binary or patch instructions
+```
+
+## License Verification Patterns
+
+| Pattern | Detection | Bypass |
+|---|---|---|
+| Name/Serial | Serial derived from username via checksum/algo | Reverse algo, write keygen |
+| Public Key (RSA) | License signed with private key, verified with embedded public | Replace public key with self-generated |
+| Online Validation | POST license to server, check response | Patch HTTP response / DNS redirect to local |
+| Hardware ID Lock | Hash of CPU/disk/MAC compared to license | Hook HWID function, return constant |
+| Timestamp/Trial | Check file time / registry key / counter | Reset trial data, freeze time |
+| Integrity Check | CRC/checksum of .text section | NOP check or recalculate after patch |
+| Obfuscated Check | VMProtect/Themida wrapped, virtualized code | Dump after unpack, trace with x64dbg |
+
+## Keygen Templates
+
+```python
+# === Name/Serial Keygen ===
+import hashlib
+def name_to_serial(name: str) -> str:
+    """Generate serial from username via custom hash."""
+    digest = hashlib.sha256(name.encode()).hexdigest().upper()
+    chunks = [digest[i:i+4] for i in range(0, 16, 4)]
+    return "-".join(chunks)  # XXXX-XXXX-XXXX-XXXX
+
+# === RSA Key Replacement ===
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
+def replace_rsa_key(original_pubkey_hex: str):
+    """Generate new RSA keypair, replace embedded public key."""
+    private = rsa.generate_private_key(65537, 2048)
+    public = private.public_key()
+    new_pubkey = public.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo).hex()
+    # Patch binary: replace original_pubkey_hex with new_pubkey at offset found via hex search
+    # Then sign licenses with private key
+    return new_pubkey, private
+
+# === HWID Spoof Keygen ===
+def hwid_spoof_keygen(username: str, fixed_hwid: str = "1234-5678-9ABC-DEF0"):
+    """Generate license that encodes a fixed HWID — hook GetVolumeInformation to always return this."""
+    data = f"{username}:{fixed_hwid}"
+    encoded = hashlib.sha256(data.encode()).hexdigest()[:20].upper()
+
+…（截断，全文见来源卡）

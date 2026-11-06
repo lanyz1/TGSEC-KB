@@ -1,0 +1,17 @@
+admin
+login
+api
+robots.txt
+sitemap.xml
+.env
+.git/config
+backup.zip
+console
+dashboard
+health
+status
+uploads
+static
+assets
+index.php
+index.html

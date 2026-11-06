@@ -1,0 +1,92 @@
+# 2026 最新攻击技术总览（新兴面速查）
+
+> 从权威 2026 研究成果与实战趋势提取的新兴攻击面——逢目标时按新面补充测试，不替代经典流程。全部授权测试手法。
+
+## 一、Passkey / WebAuthn 攻击面（2026 核心新面）
+
+> Passkey 被宣传为"抗钓鱼"，但 2026 研究揭示协议实现层与认证后层的多条绕过路径。
+
+### 1. HiPass：劫持 CTAP（IEEE 2026）
+攻击者作为受害 PC 与认证器（手机）之间的 MitM，利用 **cross-device 认证（扫码流）**：
+```
+受害 PC ←→ 攻击者(混合传输中继) ←→ 受害手机(认证器)
+1. 受害人扫攻击者 PC 上的二维码（社工）
+2. 攻击者中继 PC↔手机 间的 CTAP 消息
+3. Passkey 断言为攻击者的 origin 签发
+4. 攻击者 PC 会话 = 受害者 → 完全接管
+```
+
+### 2. 会话令牌缺口（更常见）
+- **Passkey 只保护登录仪式，不保护后续签发的 token**：窃取 session/JWT（XSS/日志/Referer）直接绕过 Passkey
+- **注册流泄露长态密钥**：`/webauthn/register/begin`、`/attestation/options` 端点常回显 API key/bearer token（响应体或 Set-Cookie）→ XSS/开放重定向在注册流中窃取
+- **设备同步面**：Apple/Google passkey 跨设备同步 → 共享设备让凭证到新主体无需重新验证
+
+### 3. 测试清单（逢 Passkey 登录）
+```
+□ 登录后 token 是否仍可被 XSS/日志窃取（Passkey 无跟进保护）
+□ 注册/挑战端点是否回显长态凭证
+□ 扫码流是否有 CTAP 中继可插（跨设备会话）
+□ 设备同步/多设备凭证面
+□ clickjacking: WebAuthn 注册是否能在 iframe 里"一键通过"
+□ 认证后会话绑定（改设备后会话是否仍有效）
+```
+
+## 二、HTTP/3 (QUIC) 绕限流（2026）
+
+- **0-RTT 重放**：QUIC 0-RTT 允许不完成握手就重放早期数据——按"已建立会话/完成握手"计数的限流器漏计
+- **抓包重放**：捕获 0-RTT early-data 请求在握手完成前批量重放（OTP/登录口）
+- **新变量**：HTTP/3 的 IP 聚合（NAT/QUIC 连接迁移）打爆 per-IP 限制假设
+- **测试**：目标支持 HTTP/3（`curl --http3`）时，验证码/限次接口测 QUIC 0-RTT 重放
+
+## 三、AI 驱动认证绕过（2026 趋势）
+
+- **行为模拟**：AI 学习目标用户行为模式（点击节奏/鼠标轨迹/时间分布）→ 绕过风控/行为验证
+- **验证码破解**：AI 视觉模型直接解图像验证码（不再是 OCR 老套路）
+- **生物特征对抗**：Deepfake 语音/视频注入活体检测（注意：KYC 面与伪造证件红线重合——**只做评估识别，不做实操**）
+- **测试面**：AI 风控系统（登录频控/异常检测）用行为差异测试响应差异，不做深度对抗
+
+## 四、AI 内容审核绕过（业务逻辑面）
+
+内容审核型业务（社区/电商/UGC）2026 高发：
+- **多模态绕过**：文字审核严 → 图片里嵌字/语音转文字/ASCII art 绕过
+- **编码变体**：Unicode 同形字、零宽字符、全角/半角混插
+- **上下文分段**：单条安全但拼接成恶意（分片投递）
+- **提示注入联动**：审核是 LLM → 让模型"翻译"恶意内容（prompt 注入绕过审核，见 ai-llm 手册）
+- **测试**：绕过审核发布内容 = 存储 XSS/恶意内容风险（高危面，管理员可见）
+
+## 五、AI API 对象级 IDOR（2026 高发）
+
+**LLM/RAG 预测端点**只校验 API key 有效、不校验对象归属：
+```bash
+# 创建对话拿 conversation_id
+curl -sk -X POST "https://api.target.com/v1/chat/completions" \
+  -H "Authorization: Bearer sk-ATTACKER_KEY" \
+  -d '{"model":"gpt-4","messages":[{"role":"user","content":"hi"}]}'
+# 换别人的 conversation_id/document_id 读他人对话 → IDOR
+curl -sk "https://api.target.com/v1/conversations/<OTHER_ID>" ...
+```
+- 类型：conversation_id / document_id / file_id / thread_id / assistant_id
+- MCP server + LLM API 对象级鉴权缺失是 2026 CVE 高频（如 CVE-2026-49813 类），测试时先枚举对象 ID 规律
+
+## 六、Clickjacking 新组合（2026）
+
+| 组合 | 原理 |
+|------|------|
+| WebAuthn 注册点击劫持 | `publickey-credentials-create` 委托 → 透明 iframe 一键注册攻击者 passkey 到受害者账号 |
+| 子域接管 + frame-ancestors | 悬空 CNAME 接管得同源 `legacy-app.target.com`；`frame-ancestors: 'self'` 放行任何同源 → 接管域 frame 鉴权页（SameSite+ancestors 双双通过） |
+| 拖放跨域数据外传 | drag-and-drop 从 iframe 拖数据到攻击者页（`clickjacking-test.md` 延伸） |
+
+## 七、Token 侧信道与算法新向量（2026）
+
+- **Token 侧信道**：JWT 处理的时间差/错误差异提取信息（算法混淆新向量）
+- **Passkey 会话与 JWT 分离**：强认证后弱令牌（攻击面不在认证在令牌）
+- **签名算法降级**：新实现里 RS256→HS256/`none` 过滤不严（配合 oauth-oidc 手册）
+- **测试**：过一遍 `jwt_tool` 全模式 + 令牌生命周期（过期/吊销/轮换检查）
+
+## 八、2026 全局作战提醒
+
+1. **AI 面新增**：AI API IDOR、提示注入→凭证、MCP 面（`ai-llm攻击面.md`）——2026 目标比往年更容易在企业 AI 集成里出高分
+2. **认证进化**：Passkey/WebAuthn 出现 → 测"认证后令牌面"而非只测登录
+3. **协议演进**：HTTP/3 支持越多 → QUIC 限流绕过/0-RTT 重放成新差分面
+4. **云托管迭代**：IMDSv2 普及 → SSRF 打凭证需要 PUT+头（`ssrf深化`）；新 CVE（容器逃逸 2026 系列）持续跟进
+5. **红线不变**：AI/Deepfake 类只评估识别（检测规则与存在性证明），不做伪造实操；KYC/证件面不碰

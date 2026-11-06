@@ -1,0 +1,23 @@
+# 子卡索引 第 2/2 片（21 张，ai-ide-ops → windows-scheduled-task-ops）
+
+- **ai-ide-ops** — Use when configuring or debugging Cursor/Cline AI IDEs.  ·  `references/legacy/ai-ide-ops.md`  ·  `/root/.hermes/skills/software-development/ai-ide-ops`
+- **browser-js-debugging** — 网页JS报错/交互失效诊断: headless Chrome+CDP抓console错误。触发: 按钮不跳转。  ·  `references/legacy/browser-js-debugging.md`  ·  `/root/.hermes/skills/software-development/browser-js-debugging`
+- **codebase-inspection** — Inspect codebases w/ pygount: LOC, languages, ratios.  ·  `references/legacy/codebase-inspection.md`  ·  `/root/.hermes/skills/software-development/codebase-inspection`
+- **dogfood** — Exploratory QA of web apps: find bugs, evidence, reports.  ·  `references/legacy/dogfood.md`  ·  `/root/.hermes/skills/software-development/dogfood`
+- **gitbash-windows-toolchain-ops** — Run Linux CLI tools under git-bash on Windows.  ·  `references/legacy/gitbash-windows-toolchain-ops.md`  ·  `/root/.hermes/skills/software-development/gitbash-windows-toolchain-ops`
+- **hermes-skills-archive** — 整理技能库时使用: 按主题分类归档 Hermes 技能到项目并生成索引文档。  ·  `references/legacy/hermes-skills-archive.md`  ·  `/root/.hermes/skills/software-development/hermes-skills-archive`
+- **inspecting-hermes-desktop-dom** — Read the live Hermes desktop DOM/CSS over CDP.  ·  `references/legacy/inspecting-hermes-desktop-dom.md`  ·  `/root/.hermes/skills/software-development/inspecting-hermes-desktop-dom`
+- **mechanical-code-splitting** — Use when 结构闸报函数/文件超限要真拆（保语义）。AST 切段+行为自证。  ·  `references/legacy/mechanical-code-splitting.md`  ·  `/root/.hermes/skills/software-development/mechanical-code-splitting`
+- **node-inspect-debugger** — Debug Node.js via --inspect + Chrome DevTools Protocol CLI.  ·  `references/legacy/node-inspect-debugger.md`  ·  `/root/.hermes/skills/software-development/node-inspect-debugger`
+- **plan** — Write a markdown plan to .hermes/plans/; no execution.  ·  `references/legacy/plan.md`  ·  `/root/.hermes/skills/software-development/plan`
+- **project-rebranding** — Use when 把开源项目去品牌化/换品牌：删原作者标记与git地址、换logo与品牌名。  ·  `references/legacy/project-rebranding.md`  ·  `/root/.hermes/skills/software-development/project-rebranding`
+- **python-debugpy** — Debug Python: pdb REPL + debugpy remote (DAP).  ·  `references/legacy/python-debugpy.md`  ·  `/root/.hermes/skills/software-development/python-debugpy`
+- **rebranding-open-source-tool** — Use when 把开源工具去品牌化/洗白成自己的名字与logo。  ·  `references/legacy/rebranding-open-source-tool.md`  ·  `/root/.hermes/skills/software-development/rebranding-open-source-tool`
+- **requesting-code-review** — Pre-commit review: security scan, quality gates, auto-fix.  ·  `references/legacy/requesting-code-review.md`  ·  `/root/.hermes/skills/software-development/requesting-code-review`
+- **simplify-code** — Parallel 4-agent cleanup of recent code changes.  ·  `references/legacy/simplify-code.md`  ·  `/root/.hermes/skills/software-development/simplify-code`
+- **spike** — Throwaway experiments to validate an idea before build.  ·  `references/legacy/spike.md`  ·  `/root/.hermes/skills/software-development/spike`
+- **systematic-debugging** — 4-phase root cause debugging: understand bugs before fixing.  ·  `references/legacy/systematic-debugging.md`  ·  `/root/.hermes/skills/software-development/systematic-debugging`
+- **test-driven-development** — TDD: enforce RED-GREEN-REFACTOR, tests before code.  ·  `references/legacy/test-driven-development.md`  ·  `/root/.hermes/skills/software-development/test-driven-development`
+- **unfamiliar-codebase-onboarding** — Read an unfamiliar codebase and deliver a usage guide.  ·  `references/legacy/unfamiliar-codebase-onboarding.md`  ·  `/root/.hermes/skills/software-development/unfamiliar-codebase-onboarding`
+- **windows-console-flash-forensics** — Windows 黑窗口/cmd 一直弹窗时用。进程审计定位源头 + 隐藏外壳修复。  ·  `references/legacy/windows-console-flash-forensics.md`  ·  `/root/.hermes/skills/software-development/windows-console-flash-forensics`
+- **windows-scheduled-task-ops** — Use when 排查 Windows 计划任务(定时弹窗/某任务是什么/还在跑吗)。盘点→判读→证据→改入口。  ·  `references/legacy/windows-scheduled-task-ops.md`  ·  `/root/.hermes/skills/software-development/windows-scheduled-task-ops`

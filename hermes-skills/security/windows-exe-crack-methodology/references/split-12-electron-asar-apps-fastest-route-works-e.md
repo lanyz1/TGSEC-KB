@@ -1,0 +1,15 @@
+## Electron (asar) apps — fastest route (works every time)
+- 识别: resources/app.asar + chromium paks。核心逻辑全在 asar 里的 JS(未混淆可读)。
+- 破解 = 解包(`npx @electron/asar extract`)→ patch `dist-electron/main.js`(验证函数返回 true/固定 token)→ 重打包(`npx @electron/asar pack out resources/app.asar --unpack-dir "{dist,node_modules,public}"`,native 模块必须外置)→ 替换。
+- 关键: 前端 Vue 通过 `ipcRenderer.invoke` 调主进程,只 patch 主进程即可;路由守卫 + `getStore('collecttoken')` 返回假 token = 启动即已激活。
+- **PITFALL — 页面级二次授权检查**: 主界面组件内部常再查 expireDate:`Number(expireDateRaw)` → `Date.now() >= expireTime`。**expireDate 必须返回毫秒时间戳数字**(`"4102444799000"` = 2099-12-31),不是日期字符串 `"2099-12-31"`(Number() → NaN → 判定「授权已到期」)。
+- **PITFALL — 成功判定必须看最终业务状态**: 「主窗口关闭/无弹框」≠ 破解成功(程序退出/崩溃同样表现,本会话被用户当场揭穿)。成功 = CDP 确认 hash 路由 #/control/*(非 #/login)、bodyText 无报错文字(「授权已到期」等)、功能控件渲染。详见 `references/electron-asar-crack.md`。
+- **账号密码登录型(非激活码/卡密)**: 登录 = 表单 username+password → `window.ipcRenderer.invoke('http-request', url, config)` → 主进程 handler 把 `http://127.0.0.1:81/api` 替换成真实服务器(如 tk_wu.sswhgame.com)。http-request 返回 **axios 风格** `{ok:true, status:200, data:{code:200, data:<实际数据>, msg:'success'}}` — 伪造时按此包装,否则 request() 抛「接口错误」。
+- **PITFALL — 路由守卫读 localStorage(前端),不是主进程 store**: patch `getStore('token')` 对守卫无效(守卫用 `localStorage.getItem('token')`)。必须 patch **前端 bundle** 注入 localStorage。
+- **PITFALL — 前端注入位置**: 不要插在 router 初始化处(`ip=im({history:Vv(),routes:lW});ip.beforeEach` 前插入 → 破坏语法 `Missing initializer in const declaration` → 页面空白且无 console 错误)。**正确做法 = 文件第一行前注入** `localStorage.setItem("token","...");localStorage.setItem("userDirect","1");localStorage.setItem("serverType","0");`,然后 `node --check <bundle>.js` 验证语法再打包。
+- **PITFALL — 路由守卫卡在 promise 链**: 守卫 `token&&...?Nt(isLogin).then(...Vn("").then(o(...)))` — 若 isLogin 伪造成功但 **accountList handler 执行本地数据库初始化(卡住/reject)→ 守卫 promise 不 resolve → 页面只渲染 `<toast></toast>` 不渲染组件**。patch `ipcMain.handle("accountList")` 整个 handler 为 `return { ok:true, status:200, data:{list:[], total:0} }`。
+- **PITFALL — native 模块 unpack 后缺 package.json**: 原始 asar 把 native 模块(better-sqlite3)拆成 package.json 在 asar 内 + .node 二进制在 app.asar.unpacked。`asar extract` 后 node_modules 里 **缺 package.json** → 重打包后 `Cannot find package '...app.asar\node_modules\better-sqlite3\index.js'` 主进程崩。修复: `cp -r resources/app.asar.unpacked/node_modules/* asar_extracted/node_modules/` 补回再 pack。
+- **TConstant.isTest 测试开关**: 代码里常有 `static isTest="0"`;="1" 时全部 API 走 127.0.0.1 本地调试。部署/破解时可利用(本地自建后端时改 1)。
+- 验证: `app.exe --remote-debugging-port=9223` + `curl /json` 看 hash 路由;深入用 websockets 连 CDP `Runtime.evaluate` 查 localStorage/bodyText/模拟点击菜单。
+- **源码整理 + 部署分析(用户要求「扣源码」时)**: asar_extracted → 新目录复制 src/ electron/ dist/ dist-electron/ public/ 配置文件(package.json, pnpm-lock.yaml, pnpm-workspace.yaml, vite.config.ts, tsconfig*.json, .env, build-workers.bat)→ zip(排除 node_modules,部署时 pnpm install)。部署分析分两层: 客户端层(源码+破解补丁=开箱即用)+ 服务端层(HTTP API :81 + WebSocket 聊天,协议在 electron/api/*.ts + workers/WebsocketWorker.ts 可读,需自建;存储 SQLite)。识别 native 依赖(better-sqlite3/ws/sharp/@bufbuild/protobuf)判断后端复杂度。
+

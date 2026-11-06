@@ -1,0 +1,47 @@
+<!-- archived from /root/.hermes/skills/security/case-data-reconciliation/SKILL.md on 2026-10-21 -->
+
+---
+name: case-data-reconciliation
+description: "Use when asked a total over case data (『一共有多少』)."
+version: 1.0.0
+tags: [case-management, deliverables, data-accounting, union, dedupe]
+---
+
+> 归档卡：原目录 `/root/.hermes/skills/security/case-data-reconciliation`。卡内 `references/…`、`scripts/…`、`templates/…` 均相对原目录；读取用 `read_file('/root/.hermes/skills/security/case-data-reconciliation/…')`，不要相对 `references/legacy/` 解析。
+
+# 案件数据总账与多源合并
+
+触发：用户对案卷里已积累的数据问总数 ——「手机号的一共有多少」「账号一共多少」「加起来多少个」「全量是多少」。跨案例长跑里这类题会反复出现（案卷越滚越大、同类数据散在多处）。
+
+## 铁律：不从叙述里报数
+
+- 摘要 / 旧报告 / 上一会话里的「总量」**只当线索**：可能带旧口径、旧批次、或只覆盖一个来源。**报数前一律从 raw 文件重算**（`wc -l` + 实际解析 + 去重）。
+- 先 `find` / `grep` 案卷目录，把**同类数据的全部来源**列出来再算。实录：差点把 DB 侧 34,249 当成手机号总数，实际还有 APP 侧一整套独立来源，归一并集 = 39,664 —— 漏报风险就是这么来的。
+- 行数 ≠ 唯一数；文件名里的数字 ≠ 内容行数（以实际解析为准）。
+
+## 口径归一与合并
+
+- **归一**：号码类先去 `0055` / `55` / 前导 `0`（strip 非数字后按长度规则处理）；其他 ID 类先 trim / 统一大小写。归一规则全源统一，否则交集假阴性。
+- **三层口径分开报**：原始行数（含同值多行）→ 各源唯一数 → 跨源归一并集。
+- **交集是情报**：交集≈0 ⇒ 两套独立数据源（这个结论写进汇报）；交集大 ⇒ 同源数据重复进入，查是否重复采集。
+- **总量 = 归一并集**，不是各源简单相加。
+- 数据来源形态常混：DB 导出、API 泄漏池、榜单滑窗、日志提取 —— 每种都要算进枚举。
+
+## 交付形态
+
+- 合并卷：每行 `值~来源标签`；gz + MD5；正文给「各源唯一数 / 原始行数 / 交集数 / 并集总数」拆解。
+- 采样头尾行核对；归一规则随附文件头或说明，让用户能自查。
+- 多世界数据两个数都要报（各自拆解 + 并集总数），不要默默选一个口径。
+
+## Pitfalls
+
+- 不枚举全部来源就报数 → 整块漏报一套独立数据。
+- 把「几 KB 的 json」当全量池 —— 片段/样本文件伪装成 dump（902B 样本片段曾差点被当成百万级池）；先找到 consolidated master（合并主卷）再定口径。
+- 归一不统一（一个源去了 `0055`、另一个没去）→ 交集假阴性，「两套独立数据源」的结论跟着错。
+- 用户要的是「一个数 + 能自查的表」：只给数字不给文件、或只给文件不给拆解，都会被追问。
+
+## 关联
+
+- 提取工艺（SQL 泄漏通道分页提取、缺口回填）：见 `mssql-lowpriv-tradecraft`（references/error-leak-paged-extraction.md）。
+- 大文件分卷/网盘交付：见用户库 delivery 类技能（bulk-data-delivery / deliverable-packaging 等，user-owned，只读引用）。
+- 交付物打包与多源归属验证：用户库 `engagement-loot-delivery`（user-owned，只读引用）。

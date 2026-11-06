@@ -1,0 +1,55 @@
+# 天元娱乐 / Playload / twCocos family — recovered constants (engagement dossier)
+
+Use when a target shows any of: redirector shell → "Playload" line domains (e.g. `cpxjkhq798.site`), `twCocos` build, `tyyl-*` domains/buckets, 波币 wallet, `tyhallkefu` customer service. White-label siblings reuse these exact client secrets.
+
+## Client-hardcoded secrets
+- WS AES-GCM key: `cocos-gate-key1!` (b64 `Y29jb3MtZ2F0ZS1rZXkxIQ==`)
+- WS auth HMAC secret: <REDACTED> (msg: `cocos-client\n<ts_ms>\n<nonce>`)
+- WS login sign key: `dfgrczfr343@*.88`
+- HTTP API sign: `X-Signature = md5(X-Timestamp + "tw-api-server-md5-key-20260811")`
+- Kefu message AES: `66df194dc5322b99` (AES-128-CBC, key=iv, PKCS7, base64)
+- AppVest SDK ACCESS_KEY: <REDACTED> (proxy hosts `tyyl.http:1260` / `tyyl.ws:1260`)
+- TG suffix appended to openId: `xklm1216`
+
+## WS protocol
+- Envelope: `{"cmd": <int>, "jsonStr": "<b64(iv12||ct||tag16)>"}`.
+- Flow: connect → AuthClient `12947457` body `{appId:"cocos-client",timestamp(ms),nonce,sign=HMAC(secret,"cocos-client\nts\nnonce")}` → AuthServer `12947458` returns `{sessionId,status}`. Re-sending AuthClient later answers `{"msg":"重复认证请求","status":0}` — transport handshake only, NOT an admin-auth command.
+- Login = RegistClient `12779521` (same cmd for register via `isRegister`). Fields: isReconnection, isRegister, sign, clientIP, machineCode, sjOpenID, headImageUrl, wxOpenID, iTargetPlatfrom, verifyCode, password, countryCode, userName.
+- sign = md5(`machineCode={mc}&userName={un}&wxOpenID={wx}&sjOpenID={sj}&password={pwd}&key=<SIGN_KEY>`); `password` = md5 hex lowercase.
+- TG login: `sjOpenID=""`, `wxOpenID="<tgOpenId>xklm1216"` → auto-login/register for ANY synthetic openId (no initData validation; verified prod + test).
+- `ik[0]` codes: 0 ok; 1001 wrong pwd; 1002 user not found; 1013 machine duplicate; 1020 catch-all; 1119 banned; 1120 verify-code wrong.
+- Test env account minted via openId `9110000000001` → player `444171` (big test balance).
+
+## Command numbers (ClientCmd / ServerCmd ≈ +1..+2)
+Auth 12947457/58 · Regist 12779521/12779555 · StartGame 12779523/24 · JoinClubThirdGame 12779536/37 (+Fail 12779538) · SearchPlayerInfo 12779625/26 · GetPlayerScore 12779619/20 · GetScoreRecord 12780368/69 · GetBobiAddress 12779651/52 · GetBobiMoney 12779655/56 · usdtOperation 12779657/58 · RechargeHandle 12779639/40 · GetRechargeInfo 12779642/43 · CashHandle 12780550/51 · GetCashRecord 12780562/63 · GetGameInfoList 12779556/57 · GetGameList 12780951/52 · GetEmail 12780947/48 · RequestVipInfo 12781315 · GetRewards 12781317/18 · send-code/verify band 12780800-12780820.
+- `JoinClubThirdGame` body `{playerIndex, type:1|2}` (+ optional `terminal`) → returns `gameUrl` with provider uid+token; `type:0` → "游戏类型无效".
+- Kill-switch commands (exist; empty `{}` kills the socket): 0xc30000, 0xc30005-07, 0xc3000a-0d, 0xc3000f; plus 0xc30503–0xc3052d band. Full list in case loot (`kill_switches.json`).
+
+## Domains / infra
+- Line-domain config: S3 `tyyl-res-437815003327-ap-east-1-an.s3.dualstack.ap-east-1.amazonaws.com` (read-open, write 403): `urls-config/download.txt`, `urls-config/weibu-native.txt` (value `asdfg` = current native token).
+- COS `uhd-1301452509.cos.ap-guangzhou.myqcloud.com`: `updir/twCocos/twCocos.json`, `updir/twCocos/main/main.manifest`, `updir/twCocos/{bundle}/{bundle}-ver.manifest` (version-only file: prod 3.2.8 vs `test/` subtree 3.2.9), `weibu-native.txt`. Same tencent account hosts the QR png (`justplay-1301452509.cos...`).
+- Domain formulas: `tyyl-http-notcn.net` / `tyyl-ws-notcn.net` (web, CF-fronted); `tyyl-http-native-asdfg.net` / `tyyl-ws-native-asdfg.net` / `tyyl-ws-h5-asdfg.net` (EdgeNext); `tyyl-test.club`.
+- Client-bundle host extraction (`grep -rhoE 'https?://[a-z0-9.-]+\.[a-z]{2,8}'` over game + SPA bundles) yields line/promo/API hosts absent from the config bucket (`nutse.peiioh.cn`, `uerkw.hneqmh.cn`, `zltn8.cn`, `api.fygzfzao.com`). Fingerprint all of them; some are pure marketing landings sharing the game's origin cluster (e.g. `万象漫创中枢` WeChat-OA SaaS on `.fyi` vhosts at `123.108.75.x`).
+- Origin vhost census: `GET https://123.108.75.32/ -H 'Host: <domain>'` answers `400 host_not_found_error` for unregistered vhosts vs `200` for real ones — separates guesses from live vhosts and exposes sibling projects on the same cluster. masscan of the /24: all 8 nodes expose the same WAF listener set (80/443/8080/8443 + plain 1023, TLS 1024), no DB/SSH ports. For HTTPS vhosts always use `curl -k --resolve <host>:<port>:<ip>` — IP-as-SNI yields SSL error / host_not_found false negatives.
+- Test env host: `tyyl-test.club` = `43.199.222.88` (AWS HK, no CDN): MySQL 3306 (5.7, native_password) + 3067 (8.0.46), Redis 6379 (AUTH required), Tomcat ×3 (5080/6090/8084, empty ROOT), Java svc on 8888 (`POST /backstage` → always `result:0`; fastjson 1.2.83, autoType closed), SSH 22. WS `@type` probes on the game socket = instant kick ⇒ fastjson-family; URL-probe class dead (loader can't fetch URLs) — archived. Test WS `wss://tyyl-test.club/ws` — separate DB from prod (account "not found" there).
+- Kefu system: `tyhallkefu.xyz` (Java + UmiJS). Unauth visitor API: chatStart / channelInfo / sendMsg / getHistoryMsg / getSessionMsg / getOfflineMsg (needs pollId+userId) / getEvaluateInfo (needs channelId) / robotAsk / transferAgent / upload. Upload: strict image whitelist + UUID rename → `/data/upload/visitor/{date}/{tenantId}/`. `getEvaluateInfo` auto-creates unknown channelId (get-or-create). sendMsg body: `{userId,senderType,msgType,msgContentSe(AES-CBC b64),msgTime}`. `chatStart` accepts arbitrary userId. Additions: `getEventMsgPoll {userId,pollId,lastMsgTime}` = long-poll event stream (event markers; `adminNick` null ⇒ no agent attached); channelId `ca1ad46026844488aec484cec7488acc`; admin `/api/chat/admin*` hard token-gated; `pollMsg` does NOT exist. Sibling kefu, same operator (ASP.NET "PWS" LiveKefu product): `www.tykefusyscc.xyz` — companyCode `L959` / companyID `2668`, visitor cookie `LiveKefu=<GUID>`, actions GetChatMsgListByChat / UploadImg / GetPublicKey / WSAddress / Login(RSA), `/Statistics/*` auth-walled, WS `wss://ltg1wss40001.chnzbhm.com` static page key, `?userID=` rewrites hidden identity. Patterns → `kefu-system-pentest` skill.
+- 波币 wallet: from `GetBobiAddress` → `https://u68bs8zo9k86pdsr6bi10.aobce.com:6443/bobi.html?jump=2&p=<b64('1;{"app_id":"aiwan","key":..}')>&client_type=2`. Device gate = UA regex only. Wallet has its own numeric account ID (≠ game playerIndex). Protocol: POST `/go/http` decimal byte arrays; UI v18.3.3a. `p` goes stale — fetch fresh per session.
+- APK: `{line-domain}/tyyl.apk` (~115MB, identical across mirrors). `libcf-msc.so` = AppVest (local proxy + device fingerprint); `libcocos2djs.so` contains `jsb_set_xxtea_key` (jsc key); EndpointHelper native methods read the weibu URLs above.
+- Provider seen: `walitest.com` (瓦力 vendor UAT; DNS 18.166.220.228). Web apps by port: 7000 lobby shell + `/order/index.html` (Vue3+Vite bet history, assets `/order/assets/index-*.js`), 7011 模拟商户, 7012 webviewi18n twin, 7013 H5 Mock Merchant (POST-only JSON), 7030 瓦力API后台 (agent console), 7036 bet-detail webview, 8887 bare API answering "1".
+- `/api/app/*.do` surface: account/get/info, account/update/nickname|icon, cfg/all, setting/game|user, activity/list, notice/announce/list|read, banner/list, server/types|list|get|check|path, **server/game/list, record/bet, record/daily/consumption**, record/consumption, suggestion/upload. POST = JSON body merging `{uuid,version,uid,base,lang}`; GET = `?uid=&token=<REDACTED>
+- **Responses are XOR'd**: `bytes([b ^ KEY[i % 10]])`, KEY = `[47,85,114,120,3,20,9,77,5,90]`; the order app fetches `responseType:'arraybuffer'`. Decrypt then parse JSON (trailing bytes after `}` = padding). Bare-curl 500s ⇒ capture a live request as template before scripting.
+- Token = `base64("{uid}_{ts_ms}:{16-char sig}")`, sent as `token` header and `?token=`. Forge matrix (empty/zeros/junk/uid swap/ts swap) all answer `{"code":-201,"desc":"账号认证已失效…"}` ⇒ server-signed; expiry within hours (5 harvested URLs all dead later). Mint chain: vendor console `POST /api/user/enter_game {user_name, game}` → `{game_url, game_reason}` (mock7013 bundle renders it, with dev_url/new_window toggles).
+- Vendor panels: 7030 login `POST /api/login {accountName, password=md5(accountName+mills+password), mills, currency}` → `data.token`; `1002` also covers "币种设置错误" (currency required) — omitting one field sent a 3000-word spray into the void. Rate limit is ACCOUNT-level: 2 quick tries → 90s lock, ANY request during cooldown renews it, storms push it to 5–8 min, fresh Tor exits don't help; measure with total silence, one account. Username oracle: `1001`=absent, `1002`=exists (validate against garbled names first). 7036 `GET /api/detail?p=&s=&lang=` returns a default record structure for junk p/s (tolerant parse). 7013 `/api/auth/me` answers `{"ok":true,"data":{"name":""}}` pre-auth; business endpoints answer `{"ok":false,"msg":"auth"}`.
+- `/source` (game HTTP API) requires the client signature: unsigned 403, signed 200 on prod/test/backup. Signed it is read-only (resource rows = domain→invite code); `name`/`type` filters are exact-match parameterized, `sort`/`order` ignored, POST/PUT/DELETE answer `code:1500 internal error` — don't re-run SQLi batteries here.
+
+## Payment / recharge chain (recovered)
+
+- Channel table via `GetRechargeInfo` (12779642/43): `channelsDetail` JSON string + `openChannel` array. Recovered ids: 106 数字货币 (`TKQsAar8XPdM7XkFBghG9reyWGaHDjDcjG` = TRON address in the name) · 103/108/112/130/131 支付宝 · 109 银行卡 · 110 K豆PAY · 111 波币 · 115 OKPAY · 116/117/119 JD支付宝 · 121-124 财盈支付 · 139 微信 · 140-142 合盈支付. paymentType: 0 aggregate gateway, 1 bank card, 5 crypto, 6 WeChat.
+- Order mint via `RechargeHandle` (12779639/40) body `{rechargeCount, palyerName, channelType, playerIndex}` — the `palyerName` typo is what the server binds; result 0 + `strShowUrl` = checkout, result 1 = 支付渠道异常请切换渠道.
+- Gateways: OKPAY = `manpc03.sprsp33.com/form/payorderzz.html?id=<uuid>` + unauth `/getpay?id=` (amount/orderid/notifyurl/payee 拓维); 支付宝 = `ccesw.exallabkmake.xyz` RuoYi merchant panel (`/prod-api/`, captchaEnabled false, `/v2/api-docs` unauth, login "操作频繁" system-wide, register off); 财盈/合盈/微信 = `api.zjrgne6gw.com/orders/<uuid>?token=<RS256 JWT {order_id}>` (Rails+NewRelic+Vite shell; `/orders/<uuid>.json` = 500); 微信 = `t1j-js.grqpyb.com/pay/P...`; 银行卡 = `k2n8sg.vtfuzi.cn/<short>`.
+- Operator callback server = `tuowei-api-payment.com/payServer/PayNotify{Okp,Heying,Bobi}`: Tomcat 9.0.118 + Struts2 (404 "There is no Action mapped for namespace"), JSON body → `fail`, form/GET → `FAIL`, S2-045/046/057/059 no callback. This host (from OKPay `notifyurl`) is operator-owned → outranks any provider panel.
+
+## Ops notes
+- Each line domain serves the same SPA (5717B) + `/game/` Cocos build; `settings.<hash>.js` → bundle hashes.
+- Test env register gated by email code (no working mail) — use the openId path instead.
+- SearchPlayerInfo `{playerIndex:"6digit"}` semantics: 0 = found (other), 1 = not found, 2 = self.

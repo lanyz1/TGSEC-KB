@@ -1,0 +1,85 @@
+# 0day 挖掘方法论（白盒与灰盒高级审计）
+
+> 国家级能力线的核心：从「用已知漏洞打」到「发现未知漏洞」。面向**授权代码审计**（开源项目/自研源码获得授权），及**厂商致谢/SRC 白盒项目**。
+
+## 一、审计对象与前置
+
+| 对象 | 前置 |
+|------|------|
+| 开源项目（Apache/Spring/Laravel/Kernel 组件） | 公开即授权审计；提交 CVE 走厂商流程 |
+| 自研/商业源码 | 必须有书面授权（SRC 项目/合同许可） |
+| 依赖组件 | 目标系统在用的组件版本 → 不给源码就拉同版本公开源码审计 |
+
+先建立：**版本 → 修复记录 → 攻击面**三维。`git log`/release notes 是金矿（从修复 diff 反推漏洞模式）。
+
+## 二、核心方法论：从修复 Diff 反推漏洞（Patch Diffing）
+
+1. 关注新版本修复公告/CVE 通报 → 拉老版本源码
+2. `git log -p` 找 **安全相关 commit**（关键词：security、auth、bypass、注入、校验、CVE）
+3. 读 diff：加了什么检查 → 没这个检查之前是什么漏洞 → 老版本可用性验证
+4. 效率最高的 0day 入口：**厂商刚修的同类漏洞，在相邻函数/其他语言实现/相关组件里找同款**
+
+## 三、四大攻击面主攻顺序
+
+### 1. 反序列化（历史 0day 大户）
+- 找 `ObjectInputStream`/`readObject`/`unserialize`/`pickle`/`Marshal` 入口
+- 找 gadget 链组件：`ysoserial`/`CommonsCollections` 系——组件版本对上就有
+- 重点：JSON 反序列化（Fastjson/Jackson polymorphic）、YAML、XML、二进制协议
+
+### 2. 表达式注入（EL/SpEL/OGNL/JEXL）
+- 找 `${}`/`#{}`/`${{}}` 模板拼接点（日志模板、规则引擎、告警模板、导出模板）
+- SpEL：`T(java.lang.Runtime).getRuntime().exec(...)`；表达式沙箱绕过历史悠长
+
+### 3. 模板注入（SSTI）
+- Freemarker/Jinja2/Velocity/Thymeleaf 用户可控输入进模板
+- 探针：`${7*7}`、`{{7*7}}`、`<%=7*7%>`、`#{7*7}` → 49 回显
+- 绕过：内置对象（`__class__`/`__globals__` 链）、沙箱逃逸
+
+### 4. 参数校验缺失（业务层 0day）
+- 大小写/Unicode 归一化绕过：`admin` vs `Admin` vs `ａｄｍｉｎ`（全角）
+- 解析差异：前端 JS 校验 ≠ 后端；网关校验 ≠ 业务源；不同框架解析同一参数的差异（见 `http-smuggling-test.md`/`hpp-test.md`）
+
+## 四、代码审计四步走
+
+```
+1. 入口定位：路由/控制器/注解/配置 → 所有外部可达入口清单
+2. 数据流追踪：入口参数 → 污染点 → 汇聚点（执行/查询/渲染/IO）
+3. 边界检查审计：每个汇聚点上游有没有校验？校验在哪一层？可绕过吗？
+4. 差分爆破：对校验逻辑做「合法值/空/非法/超长/Unicode/双编码」矩阵
+```
+
+关键关切点速查：
+- **权限**：`@PreAuthorize` 缺了吗？方法级还是类级？通配符写对了吗？
+- **注入**：拼接 SQL/模板/表达式；预编译参数真的预编译了吗？order by/列名位置预编译无效
+- **文件**：路径拼接、解压路径穿越、软链接、符号链接跟随
+- **加密**：`!=` 字符串比较 vs `MessageDigest.isEqual`（时序）、`==` 比较哈希、ECB 模式、弱 IV
+- **随机**：`Math.random()` 用于安全 token、`rand()` 无种子、UUID 可预测、自增+时间戳
+
+## 五、漏洞模式库（看到就想到）
+
+| 代码特征 | 想到什么 |
+|---------|---------|
+| `String.format` + 用户输入 | 格式化字符串（老）/ 无 |
+| `ProcessBuilder`/`Runtime.exec` + 拼接 | 命令注入（注意 exec 无 shell 语义，需 `bash -c`/`/bin/sh -c` 才可注入） |
+| `Class.forName` + 输入 | 类加载注入 |
+| `DriverManager.getConnection` + 输入 | JDBC URL 注入（连接串可控 → RCE 面） |
+| `ImageIO.read`/PDF 解析 | 图形库 CVE、XXE |
+| `ObjectMapper.enableDefaultTyping` | 多态反序列化 |
+| `@RequestParam` 同名多次 | HPP 解析差异 |
+| `Path.of(input).normalize()` | 路径穿越变体（`..%2f`、双重编码、`.../`） |
+| 自定义序列化 `writeReplace`/`readResolve` | 反序列化 gadget |
+
+## 六、灰盒/黑盒辅助
+
+- **fuzzing**：对解析器/API 参数 fuzz（AFL++/libFuzzer/honggfuzz）；Web 侧用 ffuf 参数爆破 + 畸形值矩阵
+- **差分引擎**：两个版本行为对比（相同输入不同输出=可疑修复点）
+- **资产白盒化**：黑盒目标 + JS 源码/开源部分 → 半白盒，命中率骤升
+- **动态插桩**（授权环境）：`-Dcom.sun.management.jmxremote` 看栈、调试器下断点看校验点
+
+## 七、报告（0day 专用）
+
+1. 漏洞 + 影响版本 + 触发条件（精确到代码位置 `文件:行号`）
+2. 完整 PoC（最小复现：类+版本+输入+输出）
+3. 修复建议：具体代码级（补校验/换 API/加参数化）
+4. 走厂商流程：先给厂商，响应周期内不公开（如果协议要求）
+5. 红线：0day PoC 只做本地影子环境验证，不对生产应用

@@ -1,0 +1,74 @@
+<!-- archived from /root/.hermes/skills/software-development/unfamiliar-codebase-onboarding/SKILL.md on 2026-10-21 -->
+
+---
+name: unfamiliar-codebase-onboarding
+description: Read an unfamiliar codebase and deliver a usage guide.
+---
+
+> 归档卡：原目录 `/root/.hermes/skills/software-development/unfamiliar-codebase-onboarding`。卡内 `references/…`、`scripts/…`、`templates/…` 均相对原目录；读取用 `read_file('/root/.hermes/skills/software-development/unfamiliar-codebase-onboarding/…')`，不要相对 `references/legacy/` 解析。
+
+# 陌生代码库 / 交付物通读 → 使用指南
+
+场景:用户丢来一个刚拿到的大目录(搬迁来的项目、破解包、别人给的源码),说
+「阅读一遍,分析一下怎么用」。目录可能几十万文件 —— 不可能逐字读,要靠入口文档 + 实跑验证。
+
+## 0. 先量规模,再决定读什么
+
+```bash
+ls -la                      # 顶层结构
+find . -type f | wc -l      # 文件数
+```
+
+几十万文件 ⇒ **只读入口文档,绝不遍历全文**。
+
+## 1. 入口文档的固定阅读顺序
+
+按序读,前一个已答完的问题不再读下一个:
+
+1. `README.md` — 是什么 / 从哪开始 / 目录地图 / 硬闸
+2. `目录说明.txt` — 中文项目常有:哪些目录是给人看的、哪些是程序真路径
+3. `CLAUDE.md` / `AGENTS.md` — 给 AI 的规则、红线、分流表
+4. 入口目录里的 `先看这里.md` / `00-先读说明.txt` — 人类日常入口
+5. `docs/WORKFLOW.md` — 完整流程(常标注「本文是流程唯一真源」)
+6. `pyproject.toml` / `requirements.txt` — 运行时要求与依赖清单
+
+## 2. 不信文档,跑一遍才算验证(本类任务的核心纪律)
+
+文档里的版本号、依赖、入口都可能过期或是理想态。必须实际执行项目自带的自检:
+
+- `python main.py doctor` / `npm run doctor` / `--help` / `make check`
+- 缺依赖**顺手装上**(`pip install X`)再复检,不要只报告「缺少 X」
+- FAIL 项要区分是否阻塞(如 nmap 缺失只让端口扫描降级为 socket → 如实标注,不夸大成拦路虎)
+
+产出:一张「**实测状态表**」,每一行都来自刚才真实跑出来的输出。
+
+## 3. 规模用程序数,不用肉眼
+
+解析配置与清单,把规模变成数字(比读文档可信):
+
+- 授权/白名单 JSON 的条目数、单站授权文件数
+- 技能卡 / playbook / 脚本 / 案卷 / 报告的目录计数
+- 密钥是否已配:**只判断占位符还在不在,绝不把值回显到聊天**
+
+## 4. 迁移可移植性检查(拿到别的机器搬过来的东西必做)
+
+- 原 OS 写死的绝对路径(`/Users/xxx/Desktop/...`)→ 列出来并说明会报「路径不存在」
+- 软链接是否真的可用(Windows 上要真链接才能穿透)
+- `.sh` 脚本在 Windows 上要用 git-bash 跑
+- 缺的系统级二进制:给安装命令,**不给「这个功能坏了」的结论**
+
+## 5. 交付形态(该用户固定要的样子)
+
+中文,技术术语保留英文。**聊天里给要点 + 同时写一份 markdown 用 `MEDIA:` 交付**,不要只在聊天里长篇。
+骨架见 `templates/usage-guide.md`,九节:它是什么 / 实测状态表 / 三步上手 / 命令速查 /
+目录导航 / 标准流程 / 硬规则 / 平台差异 / 建议的第一步。
+
+必须回答清楚三件事:入口在哪、第一步敲什么命令、哪些命令只读安全 vs 有副作用。
+
+## Pitfalls
+
+- 不要逐字读几十万文件;也不要只凭 README 下结论 —— README 是自述,自检命令才是事实。
+- 用户问「怎么使用」要的是**能照做的手把手**,不是功能清单;每条命令都要能直接复制粘贴。
+- **平台差异章节一定要有** —— 这类交付物十有八九是跨机器搬过来的,不写第一跑就踩坑。
+- 密钥类配置只报「已配/未配」,绝不回显值。
+- 命令速查按用途分组(测绘/评估/取数/维护),别按字母序铺平 —— 用户是按目的找命令的。

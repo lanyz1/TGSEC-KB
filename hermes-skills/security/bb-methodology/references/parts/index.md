@@ -1,0 +1,7 @@
+# 全文分片索引（3 片，每片约 12KB（超长单节独立成片））
+
+> 整包：`references/full.md`；按节读分片，别一次拉整包。
+
+- 第 1 片：PART 2: WORKFLOW (What to Do) → PART 2: WORKFLOW (What to Do) — `references/parts/part-01.md`
+- 第 2 片：PART 3: NAVIGATION & TIMING → Verification — `references/parts/part-02.md`
+- 第 3 片：2026 Field Additions (from The-XSS-Rat guide) → Operator Notes — `references/parts/part-03.md`

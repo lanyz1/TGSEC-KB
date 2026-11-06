@@ -1,0 +1,2 @@
+# 重生 cron（落点 /etc/cron.d/<TAG>-persist）
+@reboot root (setsid nohup <BASE>/fguard-reviver --loop >/dev/null 2>&1 &)

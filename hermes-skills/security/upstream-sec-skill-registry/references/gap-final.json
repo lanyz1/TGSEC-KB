@@ -1,0 +1,289 @@
+{
+ "lib": "C:\\Users\\Administrator\\AppData\\Local\\hermes\\profiles\\123\\skills\\security",
+ "lib_size": 899,
+ "src": "D:/skills4redteam/pentest-pro-skills/skills",
+ "min_hits": 1,
+ "holes": [
+  [
+   "web-injection",
+   "aimy_oob_domain"
+  ]
+ ],
+ "soft": [
+  [
+   "active-directory",
+   "与内网攻击"
+  ],
+  [
+   "active-directory",
+   "凭据攻击"
+  ],
+  [
+   "binary-exploitation",
+   "二进制漏洞利用"
+  ],
+  [
+   "binary-exploitation",
+   "原语利用"
+  ],
+  [
+   "binary-exploitation",
+   "缓解绕过"
+  ],
+  [
+   "code-audit",
+   "代码审计方法论"
+  ],
+  [
+   "code-audit",
+   "十维攻击面模型"
+  ],
+  [
+   "code-audit",
+   "源码泄露检测"
+  ],
+  [
+   "code-audit",
+   "漏洞验证分界"
+  ],
+  [
+   "crypto",
+   "哈希攻击"
+  ],
+  [
+   "crypto",
+   "实现攻击"
+  ],
+  [
+   "crypto",
+   "对称缺陷"
+  ],
+  [
+   "pentest-process",
+   "不可协商"
+  ],
+  [
+   "pentest-process",
+   "工作流调度"
+  ],
+  [
+   "pentest-process",
+   "核心设计原则"
+  ],
+  [
+   "pentest-process",
+   "贯穿所有攻击面"
+  ],
+  [
+   "recon",
+   "与参数收集"
+  ],
+  [
+   "recon",
+   "云端资产"
+  ],
+  [
+   "recon",
+   "存活与指纹"
+  ],
+  [
+   "recon",
+   "统一写盘"
+  ],
+  [
+   "recon",
+   "被动资产枚举"
+  ],
+  [
+   "web-architectural",
+   "条件竞争"
+  ],
+  [
+   "web-architectural",
+   "架构层攻击"
+  ],
+  [
+   "web-injection",
+   "判定优先"
+  ],
+  [
+   "wireless",
+   "无线网络安全"
+  ],
+  [
+   "wireless",
+   "网状网络"
+  ]
+ ],
+ "report": {
+  "active-directory": {
+   "HOLE": [],
+   "SOFT": [
+    "与内网攻击",
+    "凭据攻击"
+   ],
+   "REF": [],
+   "ATTR": [
+    "bloodhound",
+    "douglasrao"
+   ],
+   "OK": 37
+  },
+  "auth-api-security": {
+   "HOLE": [],
+   "SOFT": [],
+   "REF": [],
+   "ATTR": [
+    "jwt",
+    "typeconfusion"
+   ],
+   "OK": 31
+  },
+  "binary-exploitation": {
+   "HOLE": [],
+   "SOFT": [
+    "二进制漏洞利用",
+    "原语利用",
+    "缓解绕过"
+   ],
+   "REF": [
+    "libfuzzer",
+    "privilege-escalation"
+   ],
+   "ATTR": [],
+   "OK": 22
+  },
+  "cloud-mobile-iot": {
+   "HOLE": [],
+   "SOFT": [],
+   "REF": [],
+   "ATTR": [
+    "iot"
+   ],
+   "OK": 19
+  },
+  "code-audit": {
+   "HOLE": [],
+   "SOFT": [
+    "代码审计方法论",
+    "十维攻击面模型",
+    "源码泄露检测",
+    "漏洞验证分界"
+   ],
+   "REF": [
+    "codeql",
+    "web-architectural",
+    "web-injection"
+   ],
+   "ATTR": [],
+   "OK": 17
+  },
+  "crypto": {
+   "HOLE": [],
+   "SOFT": [
+    "哈希攻击",
+    "实现攻击",
+    "对称缺陷"
+   ],
+   "REF": [],
+   "ATTR": [
+    "tls",
+    "古典密码"
+   ],
+   "OK": 18
+  },
+  "pentest-process": {
+   "HOLE": [],
+   "SOFT": [
+    "不可协商",
+    "工作流调度",
+    "核心设计原则",
+    "贯穿所有攻击面"
+   ],
+   "REF": [],
+   "ATTR": [
+    "douglasrao",
+    "src",
+    "验证门"
+   ],
+   "OK": 9
+  },
+  "post-exploitation": {
+   "HOLE": [],
+   "SOFT": [],
+   "REF": [],
+   "ATTR": [
+    "douglasrao"
+   ],
+   "OK": 35
+  },
+  "privilege-escalation": {
+   "HOLE": [],
+   "SOFT": [],
+   "REF": [],
+   "ATTR": [],
+   "OK": 26
+  },
+  "recon": {
+   "HOLE": [],
+   "SOFT": [
+    "与参数收集",
+    "云端资产",
+    "存活与指纹",
+    "统一写盘",
+    "被动资产枚举"
+   ],
+   "REF": [
+    "auth-api-security",
+    "osint",
+    "web-architectural",
+    "web-injection"
+   ],
+   "ATTR": [
+    "douglasrao"
+   ],
+   "OK": 23
+  },
+  "web-architectural": {
+   "HOLE": [],
+   "SOFT": [
+    "条件竞争",
+    "架构层攻击"
+   ],
+   "REF": [
+    "web-injection"
+   ],
+   "ATTR": [
+    "waf"
+   ],
+   "OK": 22
+  },
+  "web-injection": {
+   "HOLE": [
+    "aimy_oob_domain"
+   ],
+   "SOFT": [
+    "判定优先"
+   ],
+   "REF": [],
+   "ATTR": [
+    "douglasrao",
+    "命令注入",
+    "工具链"
+   ],
+   "OK": 36
+  },
+  "wireless": {
+   "HOLE": [],
+   "SOFT": [
+    "无线网络安全",
+    "网状网络"
+   ],
+   "REF": [],
+   "ATTR": [
+    "ghz"
+   ],
+   "OK": 31
+  }
+ }
+}

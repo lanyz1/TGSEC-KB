@@ -1,0 +1,24 @@
+# 资金中心「待结算明细」页(2026-08-14)
+
+## 需求
+卖家资金中心原有 6 tab(overview/recharge/withdraw/deposit/frozen/ledger),用户报"资金中心里面少一页待结算明细"→ 新增 settle tab(位置:冻结明细和财务流水之间)。
+
+## 数据源
+- `lib/funds-repository.ts`:`FundsSnapshot` 加 `pendingSettlementItems: PendingSettleRow[]`(`{orderId, status, amount, time, etaAt}`)。
+- **etaAt 必须结构化(翻译铁律)**:2026-08-14 用户否决服务端直返中文。`etaAt = autoConfirmAt ? autoConfirmAt 的 ISO 前16位 : null`(null=未签收)。前端渲染:`{row.etaAt ?? <span data-i18n="seller.funds.settle.etaPending">签收后 7 天到账</span>}`——兜底文案走翻译键 `seller.funds.settle.etaPending`(6 语言,插入点=各语言区 `settle.colEta` 行后,插后 count=6)。
+- **口径与资金总览"待结算"金额完全一致**(prismaSnapshot):`paidOrders`(paymentStatus='paid')且 `orderStatus in ['delivered','shipped','awaiting_shipment','paid']`(已签收/运输中/待发货/已付款);金额=净额 `Math.max(0, totalAmount - refundedAmount)`。未付款/已退款订单不计。
+- 回退分支(USE_JSON_DB 本地模式)返回空数组。
+- Order 表 `orderChannel` 列('validation'/'normal')区分校验单(供聚合,与资金页口径无关)。
+
+## 预计到账时间列(下单时间右边)
+- 结算规则:签收后 **7 天自动确认收货** → 货款进入可提现。`autoConfirmAt` 在物流签收时设置 = now+7d(`app/api/logistics/[id]/route.ts`);`settlement-tasks` 按 `autoConfirmAt <= now` 或 `deliveredAt <= cutoff` 自动确认。
+- eta 展示:已签收(delivered 且有 autoConfirmAt)→ 显示 autoConfirmAt 具体时间;未签收(shipped/awaiting_shipment/paid)→ etaAt=null,前端渲染翻译键 `seller.funds.settle.etaPending`("签收后 7 天到账" 6 语言)。
+- order-repository settlement 文案参考:"已签收"= 等待 7 天自动确认收货,确认收货后进入商户可提现余额。
+
+## 前端
+- `components/seller/SellerFundsCenter.tsx`:`FundsTab` 加 `"settle"`;tabs 数组加 `{key:"settle", label:"待结算明细", labelKey:"seller.funds.tab.settle"}`;渲染仿 frozen tab 表格(订单号 / 订单状态 / 下单时间 / 预计到账时间 / 金额)+ PaginationBar(PAGE=20)+ 空态行 colSpan 要随列数改。
+- 翻译键 ×6 语言(插入点:各语言区 `seller.funds.tab.ledger` 行前):`seller.funds.tab.settle` + `seller.funds.settle.colOrder/colStatus/colTime/colEta/colAmount/empty`。用 execute_code 按各区行号**从大到小**插(避免行号偏移),插后验证每键 count=6。
+
+## 验证
+- 资金页是 **SSR 直出**(`app/seller/funds/page.tsx` 调 getFundsSnapshot,非 API):curl `/seller/funds?tab=settle`(带卖家 cookie,登录须 `role:"seller"`)后 grep HTML 内 `pendingSettlementItems` 序列化数据(含 eta 字段)。
+- 列头/文案等客户端渲染项,验证部署生效:grep 生产 `/www/tiktok/.next-build/server/chunks/*.js` 含新字符串("预计到账时间"/"签收后 7 天到账"),BUILD_ID mtime=部署时刻。

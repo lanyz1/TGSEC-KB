@@ -1,0 +1,267 @@
+---
+title: "编解码对照与证据闸手法.md"
+generated: 2026-10-21
+kind: consolidated-playbook
+note: 由现役技能卡自动汇总；保留原卡语义，未改写攻防步骤
+---
+
+# 编解码对照与证据闸手法.md
+
+> 本页由引用该路径的现役技能卡汇总生成。原始内容与完整步骤见下方来源卡；不要把它当成独立的新打法。
+
+## 来源卡
+
+- `/root/.hermes/skills/security/agent-evidence-gate/SKILL.md`
+- `/root/.hermes/skills/security/case-review/SKILL.md`
+- `/root/.hermes/skills/security/steganography-techniques/SKILL.md`
+
+## 汇总内容
+
+### agent-evidence-gate
+
+来源：`/root/.hermes/skills/security/agent-evidence-gate/SKILL.md`
+
+# 证据闸与对照还原
+
+工具原文才是证据。高信号没耗尽不准判死。本卡不替代专链，只闸结案、对照变体、还原着色页。
+
+## 立刻跑
+
+```bash
+python3 tools/ops/case_review.py --case exports/bot-recovery/<案卷>
+python3 tools/ops/object_matrix.py check --case <案卷> --strict
+python3 tools/ops/evidence_gate.py --case <案卷> --from-status
+python3 tools/ops/case_ledger.py verify --report <案卷>
+
+python3 tools/ops/http_probe_batch.py --base https://授权站 --case <案卷> \
+  --variant '{"label":"clean","path":"/","params":{"id":"1"}}' \
+  --variant '{"label":"probe","path":"/","params":{"id":"1 OR 1=1"}}'
+
+python3 tools/ops/source_extract.py --url https://授权站 --case <案卷>
+```
+
+## 档位
+
+| 信号 | 档 | 动作 |
+|------|----|------|
+| 对照有 DIFF / 抽出 sink | L1 | 记 JSON，交接专卡 |
+| DIFF 被注入/越权/LFI 复现 | L2 | 专卡 findings + 本卡 JSON |
+| 准备写结案 / 无路 | 闸 | leftover sink/表单/DIFF → 继续打 |
+| 有身份 | 矩阵 | 先填 `测绘/object_matrix.md`，专卡阴性回表 |
+
+## 近成功闸（强制）
+
+证据里还有这些之一，不得写「无路 / 结案」：
+
+- 源码 sink（`eval` / `unserialize` / `php://filter`）
+- 表单 / 参数面未对照
+- `http_probe_batch` 的 DIFF 未解释
+- Actuator / JWT / 登录面未按专卡打完
+- 对象矩阵仍有「未测」
+
+## 失败
+
+- 闸门 FAIL → 撤回口头结论或补真实输出
+- 对照全 SAME → 换面或 `core_web_surface_probe`，不是注入阴性
+- 还原无 sink → `sensitive-dir-dump` / `lfi-rfi-exploit`
+
+## 真源
+
+- 手法：`docs/playbooks/编解码对照与证据闸手法.md`
+- VulnClaw 已并入：`docs/playbooks/VulnClaw融合升级手法.md`
+- 工具：`python3 tools/ops/evidence_gate.py --help`
+- 对照：`python3 tools/ops/http_probe_batch.py --help`
+- 还原：`python3 tools/ops/source_extract.py --help`
+
+
+---
+
+## 外部库增量（2026-10-11 分享包）
+
+## 收尾契约（能不能宣布「完成」）
+
+「完成」是运行时事件，不是自然语言。写结案/宣布成功前，先在口头/心里填这份结构（源自成熟 Agent 平台的 finalization contract，我们按本库口径收敛）：
+
+| 字段 | 本库填法 |
+|---|---|
+| `status` | in_progress / completed / blocked / failed / cancelled |
+| `evidence_verified` | 现场复现或服务端原文？否则 false |
+| `evidence_refs` | 磁盘文件名 + 字节/行数（不是「上面那段输出」） |
+| `pending_tool_runs` | 还有后台任务在跑？ |
+| `pending_plan_steps` | 对象矩阵/专卡还有「未测」格？ |
+| `pending_approvals` | 用户尚未拍板的动作？ |
+| `missing_checks` | 未复跑的批次、未对照的参数面 |
+
+硬规则：`evidence_verified=false` 时不得把候选输出写成已验证结论；`pending_*` 任一非空时不得 `completed`。
+细节与示例见 `references/finalization-contract.md`。
+
+### case-review
+
+来源：`/root/.hermes/skills/security/case-review/SKILL.md`
+
+# 案卷证据复核（Cursor Skill）
+
+## 真源
+
+1. `docs/playbooks/逆向技能缺口与路由手法.md`
+2. `python3 tools/ops/case_review.py --case exports/bot-recovery/<案卷>`
+3. 对象矩阵：`docs/playbooks/对象矩阵与身份错位手法.md`
+4. 字面量闸：`docs/playbooks/编解码对照与证据闸手法.md` · `evidence_gate.py`
+5. 恢复成功后闭环：`docs/playbooks/恢复后固化与备份.md`
+
+## 强制
+
+1. 只读案卷目录。发现缺格就补文档，不要借复核继续打点。
+2. STATUS 里已有身份线索但没有 `测绘/object_matrix.md` → 直接 FAIL。
+3. 矩阵仍有「未测」→ 警告，禁止写复工结案。
+4. 声称的 L 级 / CVE / flag 必须能被 `evidence_gate` 逐字符对上；高信号未耗尽禁止 NO_PATH。
+
+```bash
+python3 tools/ops/case_review.py --case exports/bot-recovery/<案卷>
+python3 tools/ops/case_review.py --case exports/bot-recovery/<案卷> --strict --json
+python3 tools/ops/evidence_gate.py --case <案卷> --from-status
+# 若有 证据/ledger.jsonl：
+python3 tools/ops/case_ledger.py verify --report <案卷>
+```
+
+## 过线标准
+
+- [ ] 有 `STATUS.md` 且不是空壳
+- [ ] 有 `测绘/` `接管/` `支付/` `证据/` 之一
+- [ ] 有身份则矩阵已填
+- [ ] Finding 能指回命令或文件，不是口头结论
+- [ ] `evidence_gate --from-status` 无 misses / 无 NO_PATH 拦截
+
+### steganography-techniques
+
+来源：`/root/.hermes/skills/security/steganography-techniques/SKILL.md`
+
+# steganography-techniques（测绘引擎）
+
+目标须在 `config/scope*.json`。本库已有专链时专卡赢。
+
+## 真源
+
+- 长文：`docs/learning/shizhan-pack/skills/steganography-techniques/SKILL.md`
+- 手法：`docs/playbooks/编解码对照与证据闸手法.md`
+- 工具：`python3 tools/ops/crypto_decode.py --help`
+- LSB 探针：`python3 tools/ops/stego_lsb_probe.py drive --path img.png --case <案>`
+- 路由：`python3 tools/ops/shizhan_pack_route.py --name steganography-techniques`
+
+---
+
+# SKILL: Steganography Techniques — Expert Analysis Playbook
+
+> **AI LOAD INSTRUCTION**: Expert steganography detection and extraction techniques. Covers image steganography (LSB, PNG chunk hiding, JPEG DCT, EXIF metadata, dimension tricks, palette manipulation), audio steganography (spectrogram, LSB, DTMF, morse), file steganography (polyglots, binwalk, NTFS ADS, steghide), and text steganography (whitespace, zero-width Unicode, homoglyphs). Base models miss the systematic file-type-based analysis approach and tool-specific extraction workflows.
+
+## 0. RELATED ROUTING
+
+Before going deep, consider loading:
+
+- [traffic-analysis-pcap](../traffic-analysis-pcap/SKILL.md) for extracting files from network captures before stego analysis
+- [memory-forensics-volatility](../memory-forensics-volatility/SKILL.md) for extracting files from memory dumps
+- [classical-cipher-analysis](../classical-cipher-analysis/SKILL.md) if extracted hidden data is further encrypted/encoded
+
+### Tool Reference
+
+Also load [STEGO_TOOLS_GUIDE.md](./STEGO_TOOLS_GUIDE.md) when you need:
+- Tool installation instructions and dependencies
+- Detailed command reference for each stego tool
+- Workflow patterns for specific file types
+
+---
+
+## 1. IMAGE STEGANOGRAPHY
+
+### LSB (Least Significant Bit)
+
+LSB embeds data in the least significant bits of pixel color channels.
+
+```bash
+# zsteg — LSB analysis for PNG/BMP
+zsteg image.png                       # auto-detect all LSB patterns
+zsteg image.png -a                    # try all known methods
+zsteg image.png -b 1                  # extract bit plane 1
+zsteg image.png -E "b1,rgb,lsb,xy"   # specific extraction pattern
+
+# StegSolve (Java GUI)
+java -jar StegSolve.jar
+# Navigate color planes: Red 0, Green 0, Blue 0 → look for hidden image/text
+# Data Extractor: specify bit planes + byte order
+
+# stegoveritas — comprehensive automated analysis
+stegoveritas image.png
+# Runs: exiftool, binwalk, zsteg, foremost, color plane extraction
+```
+
+### PNG Specific
+
+```bash
+# pngcheck — validate structure, find hidden chunks
+pngcheck -v image.png
+
+# Hidden chunks: tEXt, zTXt (compressed text), iTXt (international text)
+# Custom/private chunks may contain hidden data
+
+# CRC vs dimensions trick
+# If CRC doesn't match declared dimensions → image was cropped
+# Fix: brute-force correct width/height → reveals hidden rows/columns
+python3 -c "
+import struct, zlib
+with open('image.png','rb') as f:
+    data = f.read()
+# Check IHDR CRC at offset 29
+ihdr = data[12:29]
+for h in range(1,2000):
+    for w in range(1,2000):
+        new_ihdr = struct.pack('>II',w,h) + ihdr[8:]
+        if zlib.crc32(b'IHDR'+new_ihdr) & 0xffffffff == struct.unpack('>I',data[29:33])[0]:
+            print(f'Width: {w}, Height: {h}')
+"
+
+# APNG (animated PNG) — hidden frames
+# Use apngdis to extract all frames: apngdis image.png
+```
+
+### JPEG Specific
+
+```bash
+# steghide — embed/extract from JPEG (DCT coefficient modification)
+steghide extract -sf image.jpg                 # extract (no passphrase)
+steghide extract -sf image.jpg -p PASSWORD     # extract with passphrase
+steghide info image.jpg                        # check if data is embedded
+
+# stegcracker — brute force steghide passphrase
+stegcracker image.jpg wordlist.txt
+
+# jsteg — JPEG LSB steganography
+jsteg reveal image.jpg output.txt
+
+# JPEG structure analysis
+exiftool -v3 image.jpg       # verbose metadata + structure
+jpegdump image.jpg           # raw JPEG marker analysis
+```
+
+### EXIF Metadata
+
+```bash
+# exiftool — comprehensive metadata extraction
+exiftool image.jpg
+exiftool -b -ThumbnailImage image.jpg > thumb.jpg   # extract thumbnail
+exiftool -all= image.jpg                             # strip all metadata
+
+# Hidden data in EXIF fields (comment, artist, copyright, etc.)
+exiftool -Comment image.jpg
+exiftool -UserComment image.jpg
+strings image.jpg | grep -i "flag\|key\|secret"
+```
+
+### Palette-Based (GIF)
+
+```bash
+# GIF color table manipulation — data in color palette order
+gifsicle -I image.gif                    # info
+gifsicle --color-info image.gif          # palette details
+# Check for animation fram
+
+…（截断，全文见来源卡）

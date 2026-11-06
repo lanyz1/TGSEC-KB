@@ -1,0 +1,9 @@
+## Shipping / logistics page patterns (verified on 物流发货页)
+- **Carrier-specific tracking-number rules**: one `trackRules` map keyed by carrier select value (`YunExpress:/^YT\d{8,12}$/`, `DHL:/^\d{10}$/`, `FedEx:/^\d{12}$/`, `UPS:/^1Z[A-Z0-9]{16}$/`, `其他:8-20 alnum`). Switching carrier updates the input `placeholder` only. **User rule: NO inline error-text line under the field** ("不用在方框后面提示") — invalid input gets the red `.inp.err` border and the submit is hard-blocked with a toast naming the carrier rule.
+- **Ship-by deadline alert**: orange-bordered box (`.ship-alert`, `border:1px solid rgba(255,149,0,.4)` + 12% orange tint, 12px radius) with three-part layout: clock SVG + "发货时限" label + countdown `<b class="odl">` 16px bold red (ticks via the global `.odl` interval) + right-aligned muted tip. User asked to re-layout it as a bordered, structured bar — not a flat text line.
+- **收件人核对 card** (recipient verify) on the right rail: 收货人/电话/地址 + "发货前请核对" hint — mainstream shipping pages always show it to prevent wrong-ship.
+- **Package split / partial shipment**: `.pkg-row` list (包裹 N + 件数 input + 运单号 input + delete), `+ 添加包裹` button, live sum check "订单共 X 件,已分配 Y 件"; submit blocked unless 合计 === order quantity (mirrors Shopify multi-parcel shipping).
+- **doShip flow**: validate tracking# (carrier rule) → validate package sum → flip status badge 待发货→运输中, update timeline nodes (商家发货 → done with 揽收 time, 运输中 → cur). Keep the page and update in place; don't just toast.
+- **Don't duplicate fields the product page already owns**: user deleted the 运费承担 (fee bearer) radios from the ship page — shipping-cost ownership lives in the product publish form; the ship page only shows a read-only 运费模板 line.
+- 面单打印 (label printing): user removed it ("暂时用不上") — don't add it by default; only build what's asked.
+

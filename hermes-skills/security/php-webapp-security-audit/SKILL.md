@@ -1,0 +1,51 @@
+---
+name: php-webapp-security-audit
+description: Audit PHP web app source for RCE/getshell.
+---
+
+# PHP Web App Security Audit (RCE / getshell)
+
+Trigger: user asks to audit a PHP codebase (own or third-party) for code-execution / file-upload / file-write / installer vulnerabilities — "审计...getshell/代码执行", "find RCE/getshell", "audit upload/plugin/template code". Applies to e-commerce CMS, card shops, marketplaces. Always output in the user's language (Chinese for zh-CN users).
+
+## Workflow
+
+1. **Entry points first, then trace logic.** Controllers like `admin/upload.php` are thin wrappers — the real checks live in service classes (`include/service/UploadService.php`, `UpdateService.php`). Read both; judge the service, not the wrapper.
+2. **Sink inventory** (terminal grep is fine for big trees):
+   - Write: `move_uploaded_file|file_put_contents|fwrite|fopen\(|ZipArchive|extractTo|rename|copy|unlink`
+   - Exec: `eval\(|create_function|unserialize|assert\(|preg_replace.*\/e`
+   - Include: `include|require` with a variable in the path
+   - Upload: `\$_FILES|UploadService|new Upload`
+   - Hooks: `applyFilter|addFilter|doAction` — plugin hooks can rewrite upload results / redirect storage; a hostile or modified plugin = arbitrary write.
+3. **Upload verdict formula — be honest, no scaremongering:**
+   - Ext whitelist via `pathinfo($name, PATHINFO_EXTENSION)` = last segment only → `shell.php.jpg` passes, BUT if the saved name is rewritten to `random_hex.<ext>` the attacker never controls the filename → NOT direct RCE.
+   - No content check (no `getimagesize`/GD re-encode) + MIME taken from client → image polyglot (`GIF89a` + `<?php ... ?>`) lands on disk; execution depends on server config or a separate LFI. State the chain; upload alone usually needs a second primitive.
+   - Check the storage dir: is it web-executable? Is there a random-name rewrite or attacker-controlled name?
+4. **Every include/require with a variable: find ALL writers of that variable.** DB/config-sourced lists (e.g. comma-joined `enabled_plugins`) may be regex-validated on WRITE (`^[a-zA-Z0-9_\-]+$`) but NOT on read (raw `explode(',')` + concat) — one SQLi or config-write away from LFI/RCE. Always check both sides.
+5. **CSRF coverage is per-endpoint, not global.** `adminRequireLogin()` ≠ CSRF. Grep each admin POST handler for `Csrf::validate`; many endpoints skip it (found missing on `admin/upload.php`, `admin/update.php`, `admin/license.php`). Never trust comments ("所有动作必须 POST + CSRF") — verify the code.
+6. **Zip installers / updaters** (appstore, update service):
+   - Download URL: `strpos($url, $baseHost) !== 0` prefix check = host-confusion bypass via `https://host.evil.com/...` — verify the boundary char after the host is `/`.
+   - Zip-slip: `extractTo()` without per-entry name checks; entries like `../../../shell.php`.
+   - Hash: is `package_sha256` server-supplied (attacker can fake) or skipped when empty?
+   - Landing dirs inside webroot that get auto-included per request (plugin/template dirs) = persistent RCE engine.
+7. **Installers:** single-file lock (`install/install.lock`) → if anything can delete it, unauthenticated reinstall takeover (attacker-supplied DB creds overwrite `config.php`, own admin account). Report the dependency chain explicitly.
+8. **PHP file caches:** `Cache::set()` writes `<?php // {key} ... var_export($data)...` — the FILENAME key is sanitized, but the header COMMENT may embed the raw key → newline injection (`key = "x\nsystem($_GET[c]);//"`) if any caller passes user input as the key. `var_export` data is safe; group-name strings in index files too.
+9. **Plugin-loading engines** (init.php style): enabled plugin dirs' PHP is included on every request — once ANY write primitive lands a PHP file in an enabled plugin/template dir, it executes persistently. This is usually the terminal link of the exploit chain.
+
+## Output format (user preference — Chinese, per finding)
+For every vuln, exactly these 5 fields:
+1) 文件路径+行号
+2) 漏洞类型
+3) 触发条件
+4) 利用payload
+5) 危害评估
+Also include a "已排除/确认安全" (confirmed-safe) section — traversal blocked, random rename, whitelisted router, etc. It bounds the report and proves the negative space was actually checked. Label privilege requirements and chain fragility honestly (e.g. admin-only, same-second timing for predictable temp names).
+
+## Pitfalls
+- MSYS/Windows: `search_files` may fail to resolve `/tmp/...` paths (IO error). Fix: `cygpath -w /tmp` to get the real Windows path, or just `grep -rn --include='*.php'` in terminal — faster for large audits anyway.
+- Check both sides of validation: write-side regex vs read-side raw concat; cookie overrides vs config values (e.g. template-theme cookie needs regex + `existsOnDisk` + scope-installed check, not just regex).
+- Watch for client-controlled MIME (`$file['type']`) stored in DB and later used in `Content-Type` headers / downloads.
+- Scan the shipped plugins too — `content/plugin/*` code runs with full app privileges via hooks.
+- Verify install locks, update flow gating (e.g. `LicenseService::isActivated()`) — they determine whether a chain is actually reachable on the live target.
+
+## References
+- `references/emshop-2026-audit.md` — full EMSHOP 1.3.15 audit inventory (file:line vulns, exploit chains, confirmed-safe list, open items).

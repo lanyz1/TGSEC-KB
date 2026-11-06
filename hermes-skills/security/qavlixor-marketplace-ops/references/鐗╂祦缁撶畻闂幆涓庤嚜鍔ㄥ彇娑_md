@@ -1,0 +1,50 @@
+# 物流结算闭环 / 超时未发货自动取消 / 阶梯罚金(2026-08-14)
+
+## 物流状态与结算的完整链路(改物流/结算必读)
+平台**没有"自动查轨迹→更新状态"之外的第二条路**。17TRACK 查询只发生在:
+1. **卖家填单号那一刻**(fulfillment → prepareShipment 实时查真实轨迹, live 模式按轨迹判定状态)
+2. **cron/tracking 每分钟轮询**(app/api/cron/tracking/route.ts,每轮最多 15 单防配额,只查 shipped+paid+有单号订单)
+
+生成订单的**假单号** → 17TRACK 判 not found → 自动跳过,不误判签收(好事,勿改)。
+
+### 修复A(核心,2026-08-14):标"已签收"必须写 Order 时间字段
+- 位置:lib/order-repository.ts `syncLogisticsToPrisma`,event.status === "已签收" 时:
+  `updateMany({ where: { orderNo, deliveredAt: null }, data: { deliveredAt: now, autoConfirmAt: now + 7天 } })`
+- **为什么必须有**:此前只写 Shipment 表(物流表),Order.deliveredAt/autoConfirmAt 恒空 → settlement 自动确认条件(需 autoConfirmAt<=now 或 deliveredAt<=7天前)永不满足 → 货款永远卡在待结算。真实订单靠买家手动确认收货才能结算;生成订单无买家 = 永远不结算。
+- 幂等:deliveredAt IS NULL 才写,防重复刷新。
+
+### settlement 自动确认收货条件(lib/settlement-tasks.ts)
+`orderStatus in [delivered, receipt_confirmed]` + `paymentStatus=paid` + `(autoConfirmAt<=now OR deliveredAt<=now-7天)` → 置 completed + escrow released → refreshSellerWallet。
+
+## 卖家超时未发货(7天)自动取消(用户拍板)
+settlement-tasks `closeExpiredUnshippedOrders(now)`:createdAt 超过 7 天的 paid/awaiting_shipment 单 →
+- 关单(closed + paymentStatus=refunded)+ markPaymentRefunded(cancelledBy: "system")
+- 库存回补(orderChannel!=validation OR inventoryDeducted==true 才回补)+ decrementProductSold
+- 保证金罚扣(SellerDeposit kind=deduction approved, reviewNote 注明比例)
+- 通知买家(order_cancelled_by_seller)+ 通知卖家(order_cancelled_unshipped,模板 6 语言在 notification-templates.ts)
+- local-db 镜像收敛(状态→已关闭)
+- 竞态防护:updateMany count===1 才执行副作用(与发货/手动取消竞态不双罚)
+
+## 阶梯罚金(仿Ozon, 用户拍板)
+- 7 天内该店**卖家责任取消**(orderStatus=closed AND paymentStatus=refunded,completedAt 7 天内)累计:
+  - 1-2 单 → 5% / 3-5 单 → 8% / 6+ 单 → 12%
+- 本次取消算第 N+1 单;settlement 循环内实时 count 自然累计(同一轮取消 6+ 单后面自动升 12%)
+- 买家取消/超时未付款关闭不 refunded → 不计入(口径精准)
+- 手动取消 clamp [1,100];自动取消**不 clamp**(用户字面要求),两位小数
+- 实现:lib/deposit-constants.ts `CANCEL_PENALTY_LADDER` + `cancelPenaltyRate(recent)` + `cancelPenaltyFor(total, recent=1)`;deposit-rules.ts re-export 列表需手动加新函数(易漏:TS2724)
+
+## 通知(2026-08-14)
+- 生成订单卖家通知 = **单笔式**(N 笔 N 条,用户拍板接受刷屏),body 与真实订单逐字一致:"{orderNo} 已确认收款,请安排发货。",templateKey=order_paid
+- 通知内容多语言:lib/notification-templates.ts 模板字典(16+ 模板 × 6 语言 × 角色/参数分支);排除 conversation_message(消息本体)/contact_*;未知模板/参数缺失回退库中原文
+- **卖家通知必须带 recipientEmail**(`sellerEmailOfStore(storeId)` helper in notification-service.ts)——历史上 5 条 seller/order_paid 全空邮箱投递失败,3 条支付链路已修
+
+## 生产配置位置陷阱(2026-08-14)
+- 环境变量可能在 **.env.local**(Next 加载优先级高于 .env)——grep 只查 .env 会漏(TRACK17_API_KEY 就因此被误判"未配置")。
+- 查生产配置:依次 .env.local → .env → PM2 ecosystem;管理端设置页(admin/settings,读 process.env)的 ready 状态是进程 env 实时反映,可信。
+- 17TRACK:has17TrackConfig() 读 TRACK17_API_KEY || 17TRACK_API_KEY;生产已配置在 .env.local,不用加 IP 白名单(API Key 认证)。
+
+## i18n 漏网点(2026-08-14 用户抓漏):两类新增
+1. **动态状态标签(枚举/常量 → 中文直返)**:不经 translations.ts 也出现在 UI。已修先例:
+   - lib/deposit-constants.ts:DEPOSIT_KIND_LABELS(缴纳/退还/罚扣)、depositStatusLabel(待支付/待审核/已驳回/已同意退还/已扣罚/已确认)、TIER_NAMES(普通/中风险/高风险/高风险+)
+   - 处理模式:常量文件加 `xxxKey(kind,status)→翻译键` 纯映射,前端 getTranslation 渲染;旧函数保留不删但 UI 不再引用;复用现成键优先(已通过 ui.sel.24 / 已驳回 ui.sel.25 / 待审核 ui.sel.56)
+2. **UTC 时间串直返前端**(slice(0,16) 无时区标记 → 错 8 小时):服务端返完整 ISO(带 Z),前端 fmtLocal()(new Date + toLocaleString)。资金中心/保证金记录/审核时间都踩过;管理端详情页若没 fmtLocal 需补。

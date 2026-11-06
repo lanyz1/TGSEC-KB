@@ -1,0 +1,33 @@
+## 十五、内网渗透测试检查清单（高级版）
+
+- [ ] 本地信息收集：网络/系统/软件/服务/用户/会话/补丁/防火墙/共享/路由/ARP
+- [ ] 历史命令与登录记录（PowerShell历史/.bash_history/RDP/SSH外连记录）
+- [ ] 杀软/EDR识别 → 免杀策略决策
+- [ ] Windows凭证：mimikatz / Procdump / comsvcs / 注册表离线 / ntds.dit
+- [ ] Linux凭证：mimipenguin / shadow / 环境变量 / 全盘grep
+- [ ] 软件凭证：浏览器/Navicat/Xshell/向日葵/MSSQL/中间件配置
+- [ ] 云凭证：AWS/Azure/云CLI/K8s SA Token
+- [ ] 存活探测：Ping/NetBIOS/ARP/nmap/UDP
+- [ ] 端口扫描+服务识别（含AI服务端口11434/向量库端口）
+- [ ] 网段发现与多网段跳板规划
+- [ ] 连通性判断（ICMP/TCP/HTTP/DNS出网）
+- [ ] 隧道搭建（frp/Chisel/SSH/多级代理/ICMP/DNS隧道）
+- [ ] Windows提权：BypassUAC/内核CVE/服务配置/Potato/MSI
+- [ ] Linux提权：内核CVE/SUID/Cron/错误配置
+- [ ] 横向：弱口令/未授权/中间件RCE/MS17-010/撞库
+- [ ] 横向：IPC/PSEXEC/WMI/DCOM/SMBEXEC/WinRM/PTH
+- [ ] Bypass AMSI
+- [ ] 运维通道利用（补丁服务器/EDR/堡垒机）
+- [ ] 虚拟化平台后渗透（vCenter/Zabbix/Exchange/K8s）
+- [ ] 域信息收集 + BloodHound全量采集
+- [ ] 域控获取：DCSync/Zerologon/noPac/Kerberoast/AS-REP/委派/GPP
+- [ ] Kerberos攻击：金票/银票/PTT/委派滥用
+- [ ] ADCS ESC1-8 / ACL滥用 / GPO滥用
+- [ ] 域管定位与全域接管（PTH/PTT清扫）
+- [ ] 权限维持（Win/Linux/域级三层）
+- [ ] 痕迹清除（日志/历史/登录记录/时间戳）
+- [ ] 免杀验证（源码/加载/传输/执行四层，隔离环境）
+- [ ] C2配置（HTTPS/Malleable Profile/域前置/多级）
+- [ ] AI服务未授权（Ollama/vLLM/向量库/MCP/LLM平台）
+- [ ] AI辅助分析（扫描结果智能解析/攻击路径规划/报告生成）
+

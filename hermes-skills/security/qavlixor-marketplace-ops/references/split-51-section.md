@@ -1,0 +1,12 @@
+## 参考资料
+- `references/variant-deletion-incident-2026-08-12.md` — 变体批量删除事故(批量改库存 PATCH → syncProductToPrisma deleteMany notIn 删光 44 个商品变体)证据链 + 恢复脚本模式 + Prisma Json 字段勿 parse / ProductOperationMetric 无 relation / sku 全局唯一等排查坑。
+- `references/material-price-reconciliation-2026-08-12.md` — 素材权威价对账全流程(素材txt USDT价已含GBP汇率换算 / 运费规则打印机60耗材8 / 10个错版重复商品删除清单 / 同店同标题重复判定 / Nova直营店=Amazon采集价不适用素材规则 / Prisma直查坑)。
+- `references/stock-change-multi-instance-cache-2026-08-12.md` — 商品"改了刷新不变"根因实录：PM2 4 实例进程内 catalogCache 不同步的完整证据链/本地复现步骤/生产事务回滚验证法/三种修复方案。
+- `scripts/qav-prod-query.py` — 生产 DB 查询脚本上传执行器：从 deploy.py 读连接配置 → sftp 传 `_q.mjs` → 服务器执行 → 清理。paramiko 环境修复见 买家支付链路规则 节。
+- `references/pnpm-migration-windows.md` — pnpm 项目迁移新目录的完整步骤与坑(robocopy 不复制 node_modules、prisma generate 重跑、next dev 端口残留清理)。2026-08-04 迁仓库到 D:\跨境商城 时实测。
+- `references/seller-side-audit-2026-08-06.md` — 卖家端 S11-S14 审核 + 铃铛/余额划转/变更审核链路落地记录(进度、API、坑)。
+- `references/appleselect-native-select-migration.md` — 原生 select → AppleSelect 白面板替换的逐文件清单与规则。
+- `references/admin-components-i18n-2026-08-06.md` — 管理端组件轮(components/admin 下 10 组件 202 键)成果/每文件键数/豁免清单/剩余组件待办。
+- `references/deploy-and-prod-verification-2026-08-08.md` — 生产部署四步清单 + 三大事故实录（DB 静默挂/.env.local BOM、gitignore 误伤 API 路由、build 未完成 restart）+ 角标/通知已读体系 + DynamicText 半译 + 余额支付模式 + 生产验证脚本模式。
+- `references/translation-system-2026-08-09.md` — 翻译体系全景（静态键/i18nJson/UiTranslation/report-miss实时兜底/live-dict写入即翻/cron/词典缓存 7 层机制）+ ⚠️getTranslation SSR 固化切语言不更新（data-i18n+语言监听+LanguageSync自动refresh三件套）+ 售后 actor 中文标签坑 + 翻译键号占用坑 + 并发规范 + tar 自我包含事故 + 17TRACK JSON 乱码 + 售后证据 CDN 白名单。
+- `scripts/admin-i18n-verify.py` — 管理端批量 i18n 验证脚本:① 页面 data-i18n* 键 zh/en 双区存在性(MISSING_ZH/EN,防键名泄漏);② JSX 裸中文文本节点漏标探针;③ 表达式位 JS 串字面量中文补扫(EXPR_HITS,供人工按豁免清单分类)。用法见脚本 docstring。

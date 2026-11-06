@@ -1,0 +1,35 @@
+---
+name: telegram-batch-login
+description: Use when 批量做 TG 号：发码→取码源→代理直登→导 session。
+---
+
+# 批量做 TG 号（发码 → 码源取码 → 直登 → 导 session）
+
+**触发词**：做号、发码、取码、接码、码源适配、session 导出、直登包、号库进货、telethon 代理。
+**适用**：用户丢来 `号码|取码API` 清单，要批量登录/激活 Telegram 号并导 session 打包。
+**真源**：`scripts/tg_batch_login_runner.py`（类级 runner，断点续跑）+ `references/code-relay-source-adapters.md`（码源方言 + 诊断阶梯）。
+**边界**：号库入库/盘点/清库/社工推进 → `tg-account-library`；`gAAAAA` Fernet 密文 → `fernet-session-decrypt`；云控面板出号 → `tg-cloud-panel`。
+
+## 顺序（别跳步）
+1. **归一化清单** → `accounts.txt`，每行 `phone|code_api`。掩码号/缺国家码的按用户来源补（`+182x…` 这类缺 `86` 的先按 +86 补），并在回复里显式声明这个假设 + 「不对喊停」。
+2. **先探源（只读，不发码）**：每个 URL 打一次 GET 判三态——出码 / 未出码(pending) / 死（token 废、设备掉线、域名不可达）。死源直接跳过：省额度也省时间。
+3. **先确认出口**：Telethon **不读系统代理**。本机 v2rayN 必须显式 `proxy={"proxy_type":"socks5","addr":"127.0.0.1","port":10808,"rdns":True}`；`requests` 用 `proxies={"https":"socks5h://127.0.0.1:10808"}`。A/B 判据：`curl -s -m 10 -o /dev/null -w "%{http_code}"` 直连 vs 加 `-x socks5h://127.0.0.1:10808`（直连 000、代理通 ⇒ 必须走代理）。
+4. **分清「号的问题」还是「源的问题」**（Telegram 错误语义）：
+   - `send_code_request` 成功 ⇒ 号格式/设备指纹/出口全通，之后超时必定是码源侧
+   - `banned from Telegram` ⇒ 号已废，换号，别重试
+   - `FloodWaitError.seconds` ⇒ 该号近期被反复请求过码（不是本次造成的），报冷却时长
+   - `PhoneCodeInvalid/Expired` ⇒ 码到但错/过期；`SessionPasswordNeeded` ⇒ 要码源同时给 2FA 密码
+5. **每源一个窗口**（活源 180–300s，掉线/不可达 45–75s），轮询中尊重源返回的「请等待 N 秒」限流。
+6. **产物**：`<digits>.session` + `<digits>.json`（含 code / 2FA 明文）；只对成功号打 `Telegram_Sessions_N个.zip`；失败写 `failed_accounts.txt`，逐号追加 `results.jsonl`，进度写 `progress.log`。
+7. **断点续跑**：已有 `<digits>.json` 的号自动跳过 —— 用户补号/换 token 后，同一条命令重跑即可。
+
+## 坑
+- 失败号会留下**未授权空 `.session`**（Telethon 构造时即建文件）——不是成果，别当 session 交付；要删先问用户。
+- **没做的事别说做了**：别在汇报里写「顺手清理了现场」而实际没删 —— 宁报「我没清，要删说一声」。
+- 终端只回显摘要（长输出被截断）时，把命令输出 `> file` 落盘再 `read_file` 读，一次拿全；不要反复重跑同一条命令。
+- 号源会各自独立地坏，0/N 是常态：逐号给**原因**而不是笼统「失败」，并给可直接粘贴的重跑命令。
+- 共用硬编码 `api_id` 会让同工具批量连坐；设备指纹要成对改（`system_version='Windows 8.1'` 配 Android `app_version` 属跨平台混搭，风控可识别）。
+- JSON 里 `code` + 2FA 密码明文落盘 ⇒ zip 到手即账号接管；交付/留存都要说明这一点。
+
+## 汇报格式（用户偏好）
+先给数字（成功/失败）→ 逐号表格（号 / 源 / 原因）→ Telegram 侧实证 → 「需要你解锁的」清单 → 一条重跑命令。不写过程长篇。

@@ -1,0 +1,60 @@
+---
+name: tg-panel-overclaim-corrections
+description: TG 云控/号商面板定性纪律：流程内回声误判防护 + 非标 StringSession 解析 + 跨租户差分矩阵。
+---
+
+## 何时用本技能
+- 打 TG 云控/号商/发卡面板，测到「账号入池/登录」类接口回传 session 材料，准备写「会话接管」定性前
+- 平台返回的 StringSession/Session 串 telethon 解不开（unpack 报错）
+- 需要验证面板跨租户隔离是否完好时
+
+## 核心铁律：流程内回声 ≠ 接管（用户当场纠正过，禁再犯）
+云控面板的账号入池流（send-code→verify）响应里回传的 StringSession 是**自己测试号**的流程内材料——租户自带账号入池本来就是业务设计。「我上传的账号又能把 session 拿回来」不构成会话接管、不构成跨租户漏洞。写「接管闭环」之前必须先跑跨租户差分（下节矩阵），只有他人账号 ID 可读/可动作/可导出才是越权；属主自见=流程设计（最多定性「auth_key 直出浏览器=钓鱼放大器」的中危）。
+
+## 跨租户差分矩阵（五步，实测有效）
+1. **列表 fuzz**：grouped/accounts 加 scope=all / ownerUserId=all / includeAll=1 / keyword / limit → 恒只回自己账号 = 严格属主过滤
+2. **detail 无 oracle**：detail/two-factor-status × fabricated ID → 统一 403 文案 = 无存在性 oracle
+3. **worker 动作**：spambot/kick/rotate × fabricated ID → 404/403 = 归属校验在（先查存在再动作/角色守卫）
+4. **bulk 混入**：bulk 传 [OWN+RND] → total 静默过滤掉 RND = bulk 不可越权
+5. **残留 oracle 清点**：bulk-task/{任意ID} 200 null（存在性）、monitor slug 404 是否统一文案——低危残留单独列
+
+## 非标 StringSession 解析（telethon 报 unpack error 时）
+- 信号：`unpack requires a buffer of 275 bytes` = 平台自定义格式，硬套标准 353B 解析必炸
+- 对齐暴力扫描：`for off in range(12): buf=b64decode(sess[off:]+padding)`，`re.search(rb'(\d{1,3}\.){3}\d{1,3}', buf)` 命中（实测 off=1）→ IP 后 2B big-endian=port → 再取 256B=auth_key
+- 重建会话：`MemorySession().set_dc(dcId,ip,port)` + `session.auth_key=AuthKey(bytes.fromhex(key_hex))`——**必须 AuthKey 对象**，裸 bytes 报 `'bytes' object has no attribute 'key'`；dcId 可从 IP 反推（91.108.56.x=DC1）
+- 携带已有 auth_key 直连时 api_id/api_hash 不参与远端校验（仅本地参数），用平台泄露的还是自己的都能 `authorized: True`
+
+## 卡密/License 面板专项：HTTP 200 回声与跨产品差分（2026-09-19 实战补充）
+
+1. **HTTP 200 ≠ 命中**。FastAPI/uvicorn 系 license/卡密服务的错误码藏在 body（3001=密码错、1002=签名错、3002=admin_token无效）。必须解析 body 后定性，传输层 200 只说明路由通。
+2. **跨产品差分矩阵**（同套代码托管多产品线时）：A 产品卡密打 B 产品登录接口 → 应报「不属于该应用」；若报「不存在」则两库独立。用这个差分可定位校验顺序（过期/禁用检查先于 app 校验——过期卡在任何 app_code 下报同一错）。
+3. **错误码即 oracle**：假卡报「不存在」vs 真卡报「不属于该应用」=卡密存在性枚举 oracle；「应用不存在」vs 其它=app_code 有效性 oracle。有 oracle 就能建矩阵反推密钥值。
+4. **格式即情报**：placeholder 示例卡（如 12-hex:8-alnum）大概率是假的，但格式长度/字符集是格式校验的依据；不同产品线的卡密格式独立（32-hex vs 12-hex:8-alnum = 两套系统）。
+5. **中文名可直接作 app_code 值**（UTF-8 原文）；数字 id 与字符串 code 是两套主键（app_id=1..130 和 app_code=字符串可能同表两列，都试）。
+6. **客户端二进制是密钥母矿**：Windows PyInstaller 客户端优先拆旧版（PyArmor 只加密 login/core，customer_key/config/UI 常是明文 pyc）；拿到 RSA 私钥先试 PKCS1v15 解密服务端加密 blob 验证。详见 client-reverse 技能「Windows 桌面客户端」节。
+
+## 失效条件
+- 目标**不是** TG 云控/号商/发卡类面板（无账号入池/session 托管业务）——流程内回声铁律与差分矩阵不适用
+- session 串是标准 telethon StringSession（b64 解码 353 字节、首字节 0x01）——跳过对齐暴力扫描，直接 StringSession() 加载
+
+## darktgpanel 补充（2026-10-07 俄语账号托管面板实战）
+1. **JWT claims 无角色字段 = 服务端逐请求 DB 读**：claims 仅 sub/iat/exp/typ 时，role/is_register 每请求从 DB 重读，客户端 token 伪造/篡改全部无效，死循环闭合点=admin approve 端点（被 role 门挡）。此时停止 token 玩法，转凭据/泄露源。
+2. **登录名大小写不唯一**：可抢注 root/ADMIN 变体（409 oracle 先确认原名存在），但 login 严格大小写敏感、每行独立账户——是钓鱼外观弱点，无越权收益。
+3. **CF WAF UA 门**：非浏览器 UA → 403 error 1010；SNI 直打 origin --resolve 可绕但无收益（门在应用层依赖注入）。
+4. **注册口 409 oracle**是唯一安全用户名枚举通道：确认 admin/root 存在性后即停（继续枚举无收益）。
+- 差分矩阵中 fabricated ID 返回**非** 403/404（如 200 回对象/数据）——说明已直接命中跨租户越权，按 BOLA/IDOR 技能走利用流程，本技能仅用于「隔离完好」的收口定性
+- 目标接口在 send-code→verify 之外额外下发**他人**账号的 session（如 admin 导出/搜索面）——那是真实越权面，不是流程内回声，禁止套用「中危降级」口径
+
+## 面板金额定性纪律：展示数字 ≠ 资金资产（2026-09-20 实战实证）
+运营面板里的余额/流水/收益数字，写入战报为「资产」之前必须过四道验证（全部通过才算真实资金）：
+1. **交易流水**：有真实入金/出金记录吗？（实证反例：全 9 会员 tx 数组全空 = 没有钱动过）
+2. **净流入**：net_inflow 非零吗？（实证反例：所有 net_inflow=0 = 纯数字游戏）
+3. **支付通道**：有支付/入金 API、订单表、第三方支付集成吗？（实证反例：全站无支付端点）
+4. **管理员实体**：管理员是真账号还是缩写工号？（缩写工号+创建时间成批次 = 演示/内部台账）
+
+反例：Titan Dashboard 面板 17.7 亿 KRW 全量快照+月度收益+14208 条历史——四道验证全不过（tx 全空/net_inflow=0/无支付/管理员=缩写）→ 定性为**业绩展示数字**，可报告的资产仅是「可控性本身」（能改数字=信誉打击面），不是钱。
+
+**与主管价值的关系**：演示面板常是**真实业务的门面**——顺着运营实体（企业注册号/邮箱/关联域名）能找到真收款面（实证：面板→epictrader.co.kr 教材商城，真购买数 184~634/品）。定性报告应把「演示层」与「业务层」分开列。
+
+## 关联
+- Session 资产收割总纲见 tg-session-asset-engineering（AuthKey 收割/存活验证/交付）

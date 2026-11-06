@@ -1,0 +1,7 @@
+## 结构/静态体检三件套(改完代码必跑)
+
+1. `python3 -W always -m compileall -q -f tools collector master bot deploy 2>&1 | grep -ci warning` ⇒ **必须 0**。⚠️ `-W` 要放在 `-m` **之前**,放后面会报 `unrecognized arguments: -W`。
+2. `python3 tools/struct_check.py`(文件≤400/函数≤50/嵌套≤4/IP 字面量;棘轮只许变好)+ `python3 tools/bind_audit.py`(未绑定裸名必须 0)。
+   **bot 换版必做**：`python3 tools/audit_bot_menu.py $T [tools/legacy_cmds.json]` —— TG 菜单/老命令面 × 实际 handler 覆盖率,判据「死命令 0 条」(换版丢命令会静默无响应)。根因+工装见 `references/2026-10-09-bot-command-parity.md`;名册实测增益与测量口径坑见 `references/2026-10-09-gap-roster-gain-and-measurement-pitfalls.md`。**调吞吐前必读**：`references/2026-10-09-throughput-ceiling-structural-map.md` —— 候选池/预算/触发频率三条假设均已实测证伪，真瓶颈=账号票面；含 orch 串行 6 小时/轮、`ui_ok`=探活成功数、缺口补采轮会覆盖 `_cstats` 等结构铁证。**改编排前必读**：`references/2026-10-09-orch-fanout-parallelization.md` —— orch 扇出并行化（一轮 40min→5.4min，≈7.4 倍，已上线 `fanout=1`）：先量后动（每台 3分20秒）、三个误判、`fanout` 开关与一条命令回滚、离线语义证明、切换实测（12 台 61 秒内派出/94 秒内收齐）、四个坑（cron `>` 截断日志、`bk_stats` 开工即清、30s 轮询粒度、`master_state.轮` 语义）。
+3. **独立静态器(第三方,不是自家闸)**:`UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple uvx pyflakes $(ls tools/*.py collector/*.py master/*.py bot/*.py deploy/*.py)`。判读铁律:① `undefined name` **必须全部落在注入类文件**(`*_parts*.py` / `_probe_*` / `offline_master_cases_*`),做**精确计数对账**(分子==分母)才算过,不能只靠 `grep -v` 目测;② `imported but unused` **严禁批量删** —— `bot/menus.py` 的 `os/time/datetime/menus_util._deadline_dt` 等“未用”名正是 parts 模块靠宿主 globals 取用的,**删了直接炸**;③ `local variable assigned but never used` 要逐个看是真逻辑漏还是重构死副本(如 `master/merge.py:77-78` 的 `port/remote` 是死副本,真用点在 `_pull_steps:120/130`)。
+

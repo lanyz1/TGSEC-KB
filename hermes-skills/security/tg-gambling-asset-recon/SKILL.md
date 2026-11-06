@@ -1,0 +1,96 @@
+---
+name: tg-gambling-asset-recon
+description: Use when 渗透纯 TG 博彩盘，挖真实后端域名与默认凭据。
+---
+
+# 纯 TG 博彩盘资产面渗透法
+
+TG 博彩盘（下注 bot + 钱包 bot + 上下分群）通常「无公开 Web 后端」，bot 用 getUpdates 长轮询。要找真实后端和拿权限，按下面的链打。
+
+## 0. 定性判断
+- 目标纯 TG 架构时，公开域名几乎全是摆设（经常换、已失效、域名停放）。
+- 资产面核心 = bot token + 隐藏后端域名。拿后端才是「真实可利用」，域名停放/失效页是假阳性，不算。
+
+## 1. 证书透明度挖历史子域名（最关键突破口）
+`crt.sh` 常被限流/返回非 JSON，改用 **certspotter API**（免费、稳）：
+```bash
+curl -s "https://api.certspotter.com/v1/issuances?domain=目标域名&include_subdomains=true&expand=dns_names" | python3 -c "import sys,json;[print(n) for x in json.load(sys.stdin) for n in x.get('dns_names',[])]"
+```
+- 挖出的历史子域名常暴露 `pg-admin`/`admin`/`kj`/`live`/`pg` 等管理入口。
+- 域名失效 ≠ 后端死了：子域名可能仍解析到真实后端 IP。逐个 `dig +short` 验证。
+- 关联域名（如 `www.pg8vip.net`）会带出整个品牌矩阵。
+
+## 2. 前端 JS 硬编码凭据 + 验证码绕过
+拿到管理/用户端入口后，下载前端 JS（Vite/Vue/React 打包）：
+```bash
+curl -sk "https://目标/assets/index-*.js" -o app.js
+# 挖硬编码默认凭据（demo 系统必中）：
+grep -oE '(username|password|inviteCode):"[^"]+"' app.js | sort -u
+# 挖登录字段名（常见坑：captchaId vs challengeId、captchaCode vs captcha）：
+grep -oE 'challengeId|captchaId|captchaCode|captcha' app.js | sort -u
+```
+- **demo/simulation 系统前端必硬编码默认账号**（如 user001/123456/邀请码 DEMO2026）。
+- 验证码三类可绕过：①SVG 明文（`<text>验证码</text>`，unquote 直接抽）；②数学题（`9+4=?` 直接算）；③前端校验。
+- 登录字段名不对会一直 CAPTCHA_INVALID / 参数错：看 `body:JSON.stringify({...})` 里的真实 key。
+
+## 3. API 端点提取 + 未授权/越权测试
+```bash
+# 提取端点（V/st 请求函数的字符串参数）：
+grep -oE '"/[a-z][a-z0-9-]+/[a-z0-9/_-]{2,40}"' app.js | tr -d '"' | sort -u
+# 找 baseURL 前缀（fetch(`/api${path}`) 之类）：
+grep -oE 'fetch\(`/[a-z]+\$|/api/[a-z]+/v[0-9]' app.js
+```
+- 管理端端点前缀如 `/api/admin/v1`，用户端 `/api/user/v1`。
+- 逐个 GET 测未授权（code 10401=需登录，200=未授权可访问）。
+- 登录接口测 SQLi（`admin' OR '1'='1`、`AND SLEEP(4)--`）：Go/Java 后端多参数化查询，无注入别硬耗。
+
+## 4. 登录限流绕过
+- 登录接口常限流（`TOO_MANY_ATTEMPTS` / `请求过于频繁` + retryAfterSeconds）。
+- 走住宅代理换 IP 绕过：`--socks5 198.44.167.83:16266`（curl 稳，requests+SOCKS5 会 SSL EOF）。
+
+## 5. 后端指纹
+- 真实后端 IP 通常只开 80/443，MySQL(3306)/Redis(6379)/SSH(22) 全 filtered（防火墙只放行 TG webhook IP 段）。
+- 管理后台多 Go/Java（响应带 `requestId`/`code:10401`），用户端前端 Vue/React。
+
+## 已实测目标（旺博娱乐 @wb8802bot）
+- 后端 149.30.239.193；三系统：pg-admin(星凡运营中心)/pg(星汇国际)/pg8vip+kj(矿机模拟)。
+- 矿机系统 user001/123456/DEMO2026 硬编码登录成功，可充值/下单/提现（demo 模式）。
+
+## 已实测目标（12牛牛/Bull Club 马来西亚 TNG 盘）
+- 主 bot @onetwogaming_bot（12娱乐城，id 8551557163，月活12万）；关联目标 @niuniu68_bot（68牛牛，id 8726144930）。
+- 频道 @niuniuuu_12；官网 one-two-gaming.com（Cloudflare）；客服 @TNG_HBJL/@HBJL888_bot/@ks2416888。
+- 支付纯马来西亚：TNG eWallet DuitNow ID + Bank/DuitNow transfer；玩法=TNG 红包链接庄闲对战，在 TG 群「12年牛互动群」内进行。
+- 前端识别：one-two-gaming.com 的 site.js 有 `window.bullI18n`（品牌 Bull Club）+ `Telegram.WebApp`（Mini App），仅 /api/track 埋点，无 API 域名泄露。
+- 域名全是摆设：niuniu68.com 全树（api/admin/game/bot/backend/webhook）→ HugeDomains 停放（302 跳 domain_profile）；onetwogaming.com/bullclub.com → AWS 76.223.54.146 /lander 停放。
+
+## APK 逆向（Cocos Creator 博彩盘，有 APK 时必走这条）
+有 APK 下载链（主站/代理页挖 `*.apk` 或 `getapk.php`）时，APK 逆向是打穿资金面的主路线，优先级高于域名 OSINT。
+
+### 1. 解密 project.jsc（核心游戏逻辑）
+- `assets/src/project.jsc` 是 xxtea 加密的 V8 字节码；`assets/main.js`/`assets/project.json` 是明文配置。
+- **xxtea 密钥不在 Java 层**（jadx 反编译 classes.dex 搜不到），在 native `.so`：`lib/arm64-v8a/libcocos2djs.so` 的 `jsb_set_xxtea_key` 调用处。
+- 用 r2/objdump 反汇编找 `adrp x1,<页> + add x1,<off>` 定位密钥字符串地址，`r2 -q -c "ps @ 0xADDR" libcocos2djs.so` 直接读密钥。
+- Python 实现 xxtea 解密：**每个中间步必须 `& 0xffffffff`**（`y<<2`/`z<<4` 在 C 里 uint32 自动截断，Python 任意精度会溢出导致 round-trip 失败——先用加密→解密 round-trip 验证实现正确）。
+- 解密结果常是 gzip（头 `1f8b08`），`zlib.decompress(dec, 16+MAX_WBITS)` 解压得明文 JS（browserify 打包，几 MB）。
+
+### 2. 配置 URL 解密（uncompile 算法）
+- apiUrl/loginServerAddress/otpurl/downloadurl 等字段用 `uncompile` 加密（URL 编码 + 逐字符差分）。
+- JS `unescape` 逐字节解码（非 UTF-8），Python 需自定义 unescape（`%xx`→chr(0-255)），解密时 `chr((ord-… ) & 0xffff)` 防负数。
+
+### 3. WebSocket 协议逆向（登录/资金走 socket，非 HTTP）
+- 连接：`wss://<loginServerAddress>/ws`（地址无":"时用 wss，有":"用 ws）。
+- 消息 = [2B 大端长度][2B CRC-16][4B 大端时间戳][msgpack body]；CRC-16 多项式 0x70B1、初始 0xFFFF（`srcSum`）。
+- 登录消息 msgpack：`{c:1(user)/passwd/app/t:1(Guest)/token/...}`；游客登录 user=Guest+随机、token=时间戳_随机，**无需手机号验证码**。
+- 签名 header：`CENT-SIGN=md5(body前100字符+serverTime+uid)`、`CENT-TIMESTAMP=serverTime`。
+- 响应加密：`P_K`/`P_AK` 两个 32B 密钥（uncompile 解密），AES-CBC+OpenSSL KDF 解密服务器响应；密钥在 `Global.P_K`/`Global.P_AK`。
+- 资金 MsgId：`SYNC_COIN=29`、`PURCHASE_GOODS_LIST=51`(充值)、`BIG_CHARGE_ORDER=90`、`BANK_SAVE_COIN=102`/`BANK_TAKE_COIN=103`(银行存取金币)、`AC_RESERVE_COIN=72`。
+
+### 4. 障碍：CloudFront 地理封锁
+- 这类盘 WebSocket 网关(如 lo.*)常配 CloudFront Geo Restriction，报 `403 block access from your country`，只放巴基斯坦/特定国家。
+- HTTP API(service.*/ifs.*)通常**不**被 geo-block，但资金端点(`/user/balance`、`/sms/index`)需 session，而 session 靠 WebSocket 登录拿。
+- 绕过需巴基斯坦住宅代理或源站真实 IP（crt.sh 只有通配符证书时难溯源）；数据中心代理一律被 CloudFront 拒。
+
+## 关键教训（纯 TG 盘）
+- 子域名「Kestrel/ASP.NET 后端」可能是 HugeDomains/AWS 停放服务器的假阳性，302 跳 `hugedomains.com/domain_profile` 或 `/lander` 一律判定为停放，不算真实后端。
+- 纯 TG 盘真实后端 = Mini App web_app URL + bot token，两者都藏在 TG 内部；域名 OSINT 挖到头后，唯一突破是「TG 用户账号真实交互」（触发 bot 菜单拿 web_app URL）或「bot token 泄露」。没有这两样，继续挖域名是死路。
+- 挖 bot 关联网站用 web_search 搜 bot 名/邀请码/og:description，命中 facebook/instagram/telegram 推广帖能带出官网和品牌名（如 one-two-gaming.com + bullclub）。

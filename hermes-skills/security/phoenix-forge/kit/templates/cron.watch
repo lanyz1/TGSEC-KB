@@ -1,0 +1,4 @@
+# 雷达+封杀+锚点 调度（落点 /etc/cron.d/<TAG>-watch）
+*/5 * * * * root /bin/sh <BASE>/fguard-recon.sh >/dev/null 2>&1
+* * * * * root /bin/sh <BASE>/fguard-autoban.sh >/dev/null 2>&1
+*/10 * * * * root /bin/sh <BASE>/fguard-anchor.sh >/dev/null 2>&1
